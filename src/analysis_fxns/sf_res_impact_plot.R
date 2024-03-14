@@ -1,7 +1,7 @@
 plot_sf_impact <- function( param = "ChlA"){
 
   #filter and org
-  sf_chem<- filter(most_recent_chem, site_code %in% SF_Res & Year %in% c(2022, 2023) & !is.na(.data[[param]]))%>%
+  sf_chem<- filter(tidy_chem, site_code %in% SF_Res & Year %in% c(2022, 2023) & !is.na(.data[[param]]))%>%
     select(site_code,Date,all_of(param),location, Buffer_Level, Watershed_Level, watershed, Year )%>%
     mutate(location = case_when(
       location == "Stream" ~ "Beaver Creek", 
@@ -38,7 +38,7 @@ plot_sf_impact <- function( param = "ChlA"){
 
 sf_impact_df <- function(param = "ChlA"){
   
-  sf_chem <- filter(most_recent_chem, site_code %in% SF_Res & Year %in% c(2022, 2023) & !is.na(.data[[param]]))%>%
+  sf_chem <- filter(tidy_chem, site_code %in% SF_Res & Year %in% c(2022, 2023) & !is.na(.data[[param]]))%>%
     select(site_code,Date,all_of(param),location, Buffer_Level, Watershed_Level, watershed, Year )%>%
     mutate(location = case_when(
       location == "Stream" ~ "Beaver Creek", 

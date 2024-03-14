@@ -96,15 +96,16 @@ tidy_chem <- most_recent_chem%>%
   bind_rows(lower_poudre_chem)
 
 
+#site order now added to tidy chem and thus not needed
+rm(order_table, most_recent_chem, lower_poudre_chem, clean_chem_file, sensor_data, DOI, dir, data_version)
+print("Data Successfully loaded for analysis")
 ```
 
 
 ## Run above to get data loaded
 
 ```{r}
-#site order now added to tidy chem and thus not needed
-rm(order_table, most_recent_chem, lower_poudre_chem, clean_chem_file, sensor_data, DOI, dir, data_version)
-print("Data Successfully loaded for analysis")
+
 ```
 
 
@@ -684,12 +685,12 @@ sf_chla <- plot_sf_impact(param = "ChlA")+
 
 sf_no3 <- plot_sf_impact(param = "NO3")
 sf_no3
-sf_k <- plot_sf_impact(param = "K")
-sf_k
+# sf_k <- plot_sf_impact(param = "K")
+# sf_k
   
   
 
-ggsave("data/figs_output/2023_figs/sf_impact.jpg", width = 18, height  = 12, dpi = 300)
+ggsave("data/figs_output/2023_figs/sf_impact.jpg", width = 20, height  = 10, dpi = 300)
 
 
 
@@ -856,3 +857,20 @@ writexl::write_xlsx(x = chem_units, path = "data/sensor_data/correlations/chem_u
 
 ```
 
+
+# Testing New Ideas:
+- DOC in lakes 
+  does high DOC in reservoirs result in lower chla?
+  - look at chla vs DOC in lakes
+  
+```{r}
+ggplot(data = filter(tidy_chem, site_code %in% c("CBRR", "JOER","BRNR","LNGR")), aes(x = DOC, y = ChlA, color = site_code))+
+  geom_point()+
+  scale_color_manual(values = colorsBS_site_code)+
+  #facet_wrap(~status)
+  #geom_smooth(method = "lm")+
+  theme_bw()
+
+
+```
+  
