@@ -1,0 +1,835 @@
+---
+title: "Figures"
+author: "Sam Struthers"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+source("paper_analysis/00_analysis_setup.R")
+
+#basic function to save a plot in standard size, dpi and width into figures folder
+save_plot_image<- function(plot,name){
+  
+  ggsave(paste0("data/figs_output/2024_figs/",name,".jpg"), dpi = 300, width = 18, height = 10)
+  
+}
+
+```
+
+# Grab data
+
+```{r}
+
+#discrete sample data and location metadata from most recent pub
+
+DOI = "11110885"
+data_version = "v2024.04.16b"
+
+
+source("paper_analysis/functions/grab_zenodo_data.R")
+
+ all_params <- chem_units%>%
+  pull(simple)
+ 
+ tidy_chem <- most_recent_chem%>%
+  #remove random pre fire data and remove 2024 data which will be omitted from publication
+  filter(Year > 2020 & Year != 2024)%>%
+  # pfal + slep represent the same site but were moved to match future sensor location
+  mutate(distance_upstream_km = case_when(site_code == "PFAL" ~ 73.9, TRUE ~ distance_upstream_km))%>%
+  # add order table which gives the sites an order to be plotted in
+  left_join(order_table, by = "site_code")%>%
+  mutate(n_nh4 = NH4 * 0.7765, 
+         n_no3 = NO3 * 0.2259, 
+         DIN = n_nh4 + n_no3,
+         DON = DTN - DIN)
+
+
+#site order now added to tidy chem and thus not needed
+rm(order_table, most_recent_chem, DOI, data_version)
+print("Data Successfully loaded for analysis")
+```
+
+## Run above to get data loaded
+
+```{r}
+
+```
+
+# Basic post fire plots
+
+## PO4 site analysis
+
+Since PO4 is uptaken quickly, I was curious to see if any reservoir sites measured PO4 or if only stream sites would
+
+```{r}
+
+upper_PO4 <- filter(tidy_chem, watershed %nin% c("CLP Mainstem - Lower","CLP Tributary - Lower")& PO4 > 0.01)
+
+#histogram of PO4 count by site
+PO4_hist <- ggplot(upper_PO4, aes(x = PO4, fill = watershed))+
+  geom_histogram(binwidth = 0.05, color = "black")+
+  facet_wrap(~location_type, ncol = 2)+
+  labs(title = "PO4 Distribution by location type and watershed", x = "PO4 (mg/L)", y = "Count")+
+  theme_bw(base_size = 30)
+
+save_plot_image(PO4_hist, "po4_histogram.jpg")
+
+
+```
+
+## Res Boxplots 
+```{r}
+source("paper_analysis/functions/build_basic_plot.R")
+
+all_res_sites <- c("LNGR", "JOER","COMR", "HORR",  "CBRR", "PTRR", "BRNR")
+
+
+#Plot 1
+title_1 <- "ChlA"
+title_1 <- build_basic_chem_plot(sites = all_res_sites, style = "boxplot", graph_size = 25, param = title_1, title = TRUE)
+param_oi_1 <- c("DOC", "DTN", "pH", "K","NH4","NO3","PO4")
+param_notitle1 <- map(param_oi_1, ~build_basic_chem_plot(sites = all_res_sites, param = .x, style = "boxplot", graph_size = 25))
+list1 <- list(title_1, param_notitle1)%>%
+  list_flatten()
+
+ggarrange(plotlist = list1, ncol = 1)
+ggsave(filename = "data/figs_output/2023_figs/res_chem_boxplots1.jpg",width = 24, height = 30, dpi = 300)
+
+
+#Plot 2
+title_2 <- "ANC"
+title_2 <- build_basic_chem_plot(sites = all_res_sites, style = "boxplot", graph_size = 25, param = title_2, title = TRUE)
+param_oi_2 <- c("SC" ,"Na", "Mg","Ca", "F","Cl","SO4")
+param_notitle2 <- map(param_oi_2, ~build_basic_chem_plot(sites = all_res_sites, param = .x, style = "boxplot", graph_size = 25))
+list2 <- list(title_2, param_notitle2)%>%
+  list_flatten()
+
+ggarrange(plotlist = list2, ncol = 1)
+ggsave(filename = "data/figs_output/2023_figs/res_chem_boxplots2.jpg",width = 24, height = 30, dpi = 300)
+```
+
+## Res Timelines
+```{r}
+source("paper_analysis/functions/build_basic_plot.R")
+
+result_list <- map(all_params, ~build_basic_chem_plot(sites = mainstem_Res_only, param = .x, style = "timeline"))
+
+#Fire affected params
+param_oi <- c("SC","K", "NH4" , "NO3","PO4")
+param_notitle <- map(param_oi, ~build_basic_chem_plot(sites = mainstem_Res_only, param = .x, style = "timeline",graph_size = 30))
+
+
+DOC <- build_basic_chem_plot(sites = mainstem_Res_only, param = "DOC", style = "timeline",graph_size = 30, title = TRUE)
+
+param_oi_list <- list(DOC, param_notitle)%>%
+  list_flatten()
+
+
+
+
+
+#Seperate in to burn severity trending params and non trending for SI
+ggarrange(plotlist = param_oi_list, ncol = 1)
+ggsave("data/figs_output/2023_figs/DRAFT_res_oi_chem.jpg",width = 25, height = 30, dpi = 300)
+```
+
+
+## Res timeline and dotplot
+
+Grouped 2021 + 2022, summarize to monthly for timeline
+
+```{r}
+monthly_res_chla <- filter(tidy_chem, Year %in% c(2021,2022, 2023) & !is.na(ChlA)& site_code %in% mainstem_Res_only)%>%
+  select(site_code, Date, ChlA, Year)%>%
+  mutate(month = month(Date, label = TRUE, abbr = TRUE ), 
+         year_breakdown = case_when(
+           Year %in% c(2021, 2022) ~ "2021 & 2022", 
+           Year == 2023 ~ "2023"
+         ))%>%
+  group_by(site_code,year_breakdown, month)%>%
+  summarise(monthly_mean_chla = mean(ChlA))
+  
+
+res_chla <- filter(tidy_chem, Year %in% c(2021,2022, 2023) & !is.na(ChlA)& site_code %in% mainstem_Res_only)%>%
+  select(site_code, Date, ChlA, Year)%>%
+mutate(Date = as.Date(Date, format("%m/%d/%y")))
+
+chla_sum_timeline <- ggplot(data = res_chla, aes(x=Date, y=ChlA, color=site_code, group=site_code)) +
+  geom_line( linewidth=1.5) +
+  geom_point( size=5) +
+  scale_color_manual(values = colorsBS_site_code)+
+  geom_abline(aes(slope=0, intercept=2.6), color='black', linetype="dashed") +
+  geom_abline(aes(slope=0, intercept = 8), color='black', linetype="dashed") +
+  labs(x = "Date", y = " Chlorophyll a (μg/L)") +
+  theme_bw(base_size=30) +
+  theme(legend.position = "none")+
+  coord_cartesian(ylim=c(0,12))+
+  scale_x_date(date_breaks = "months", date_labels = "%b")+
+  facet_wrap(~Year, scales = "free_x")
+
+
+res_chla <- filter(tidy_chem, Year %in% c(2021,2022, 2023) & !is.na(ChlA)& site_code %in% mainstem_Res_only)%>%
+  select(site_code, Date, ChlA, Year)%>%
+  mutate(year_breakdown = case_when(
+           Year %in% c(2021, 2022) ~ "2021 & 2022", 
+           Year == 2023 ~ "2023"
+         ))
+res_chla$site_code <- factor(res_chla$site_code, levels = c("LNGR", "JOER", "CBRR", "PTRR", "BRNR"))
+
+chla_sum_dotplot <- ggplot(data = res_chla, aes(x=site_code,y=ChlA, middle=mean(ChlA))) + 
+   geom_dotplot(aes(fill=site_code), stackgroups = FALSE, binaxis = "y", method = "histodot",stackdir = "center", position = "dodge", binwidth = .3, dotsize = 1.5)+
+  stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black") +
+  scale_color_manual(values = colorsBS_site_code)+
+  scale_fill_manual(values = colorsBS_site_code)+
+  geom_abline(aes(slope=0, intercept=2.6), color='black', linetype="dashed") +
+  geom_abline(aes(slope=0, intercept = 8), color='black', linetype="dashed") +
+   labs(x = "Site", y = " Chlorophyll a (μg/L)") +
+  theme_bw(base_size=30) +
+  theme(legend.position = "none",
+            strip.background = element_blank(),
+            strip.text.x = element_blank())+
+  coord_cartesian(ylim=c(0,12))+
+  facet_wrap(~Year, scales = "free_x")
+
+
+ggarrange(chla_sum_timeline, chla_sum_dotplot, ncol = 1)
+#ggsave("data/figs_output/2023_figs/res_chla_dotplot_timeline.jpg",width = 24, height = 14, dpi = 300)
+```
+
+
+# Reservoir NO3 and chla timeline
+
+```{r}
+  
+monthly_res_chla <- tidy_chem %>%
+  filter(Year %in% c(2021, 2022, 2023) & !is.na(ChlA) & site_code %in% mainstem_Res_only) %>%
+  select(site_code, Date, NO3, DTN, ChlA, Year) %>%
+  mutate(
+    month = factor(month(Date, label = TRUE, abbr = TRUE), 
+                   levels = c("Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov")), # Ensure correct month order
+    month_year = factor(paste(month, Year), 
+                        levels = unique(paste(month(Date, label = TRUE, abbr = TRUE), Year))) # Preserve order
+  ) %>%
+  group_by(site_code, Year, month, month_year) %>%
+  summarise(
+    monthly_mean_chla = mean(ChlA, na.rm = TRUE), 
+    monthly_mean_NO3 = mean(NO3, na.rm = TRUE), 
+    monthly_mean_DTN = mean(DTN, na.rm = TRUE)
+  )
+
+
+chla_sum_timeline <-   ggplot(data = monthly_res_chla, aes(x=month_year, y=monthly_mean_chla, color=site_code, group=site_code)) +
+  geom_line( linewidth=1.5) +
+  geom_point( size=5) +
+  scale_color_manual(values = colorsBS_site_code)+
+  geom_abline(aes(slope=0, intercept=2.6), color='black', linetype="dashed") +
+  geom_abline(aes(slope=0, intercept = 8), color='black', linetype="dashed") +
+  labs(x = "Date", y = " Chlorophyll a (μg/L)") +
+  theme_bw(base_size=30) +
+  theme(legend.position = "none", 
+        axis.text.x = element_text(angle = 90),
+            strip.background = element_blank(),
+            strip.text.x = element_blank())+
+  coord_cartesian(ylim=c(0,12))+
+  #scale_x_date(date_breaks = "months", date_labels = "%b")+
+  facet_wrap(~Year, scales = "free_x")
+
+NO3_sum_timeline <-  ggplot(data = monthly_res_chla, aes(x=month_year, y=monthly_mean_NO3, color=site_code, group=site_code)) +
+  geom_line( linewidth=1.5) +
+  geom_point( size=5) +
+  scale_color_manual(values = colorsBS_site_code)+
+  labs(x = "Date", y = " NO3 (mg/L)") +
+  theme_bw(base_size=30) +
+  theme(legend.position = "none", 
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank() )+
+  #scale_x_date(date_breaks = "months", date_labels = "%b")+
+  facet_wrap(~Year, scales = "free_x")
+
+no3_chla_timeline <- ggarrange(NO3_sum_timeline, chla_sum_timeline, ncol = 1)
+
+save_plot_image(no3_chla_timeline, "res_NO3_chla_timeline.jpg")
+
+
+```
+
+
+
+
+# Reservoir Dotplots (2021-2023)
+
+### ChlA
+```{r}
+# graph only res data
+source("paper_analysis/functions/build_res_dotplot.R")
+
+chla_dotplot_res <- build_res_dotplot(param = "ChlA", binwdth = .3, sz = 1)+
+#adding meso and eutrophic levels for cold lakes
+ geom_abline(aes(slope=0, intercept=2.6), color='black', linetype="dashed") +
+    geom_abline(aes(slope=0, intercept=8), color='black', linetype="dashed") +
+    #annotate(geom="text", label= "MDL Limit (μg/L)", x="CBRR 2022", y=.075, vjust= -1)+
+    annotate(geom="text", label= "Mesotrophic", x=1.15, y=2.6, vjust= -1, size = 4)+
+    annotate(geom="text", label= "Eutrophic", x= 1.5, y=8, vjust= -1, size = 5)+
+   #fixing y axis
+    coord_cartesian(ylim=c(0,13))
+
+plot(chla_dotplot_res)
+
+save_plot_image(chla_dotplot_res, "res_chla_dotplots_2021_2023.jpg")
+
+```
+### NO3
+
+```{r}
+
+
+no3_dotplot_res <- build_res_dotplot(param = "NO3", binwdth = .045, sz = .6, incl_comr_horr = FALSE, title_min = -.1)+
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank())
+
+save_plot_image(no3_dotplot_res, "res_no3_dotplots_2021_2023.jpg")
+
+
+```
+### DTN
+
+```{r}
+
+
+DTN_dotplot_res <- build_res_dotplot(param = "DTN", binwdth = .03, sz = .6, incl_comr_horr = FALSE, title_min = -.1)+
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank())
+
+save_plot_image(DTN_dotplot_res, "res_DTN_dotplots_2021_2023.jpg")
+
+
+```
+
+
+### K
+
+```{r}
+K_dotplot_res<- build_res_dotplot(param = "K", binwdth = .05, sz = .5, incl_comr_horr = FALSE, title_min = -.1)+
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank())
+
+save_plot_image(K_dotplot_res, "res_K_dotplots_2021_2023.jpg")
+
+#timeline of k and chla at each reservoir
+
+res_k_chla <- filter(tidy_chem, Year %in% c(2021,2022, 2023) & !is.na(K)& site_code %in% mainstem_Res_only)%>%
+  select(site_code, Date, K, Year, ChlA)
+res_k_chla$site_code <- factor(res_k_chla$site_code, levels = c("LNGR", "JOER", "CBRR", "PTRR", "BRNR"))
+#timeline
+K_timeline <- ggplot(data = res_k_chla, aes(x=Date, y=K, color=site_code)) + 
+  geom_point()+
+  geom_line()+
+  scale_color_manual(values = colorsBS_site_code)+
+  labs(x = "Date", y = "K") +
+  theme_bw(base_size=30) +
+  #remove legend and x axes text
+  theme(legend.position = "none",
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+            strip.background = element_blank(),
+            strip.text.x = element_blank())+
+  facet_wrap(~Year, scales = "free_x")
+
+
+chla_timeline <-  ggplot(data = res_k_chla, aes(x=Date, y=ChlA, color=site_code)) + 
+  geom_point()+
+  geom_line()+
+  scale_color_manual(values = colorsBS_site_code)+
+  labs(x = "Date", y = "ChlA") +
+  theme_bw(base_size=30) +
+  theme(legend.position = "none",
+            strip.background = element_blank(),
+            strip.text.x = element_blank())+
+  facet_wrap(~Year, scales = "free_x")
+
+
+k_chla_timeline <- garrange(K_timeline, chla_timeline, ncol = 1)
+
+```
+
+### Na/SO4
+
+```{r}
+Na_dotplot_res<- build_res_dotplot(param = "Na", binwdth = .1, sz = .5, incl_comr_horr = FALSE, title_min = -.2)+
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank())
+
+
+so4_dotplot_res <- build_res_dotplot(param = "SO4", binwdth = .3, sz = .5, incl_comr_horr = FALSE, title_min = -.5)+
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank())
+
+
+```
+### pH
+
+No differences, grouping by reservoir only
+```{r}
+pH_dotplot_res <-  build_res_dotplot(param = "pH", binwdth = .1, sz = .5, incl_comr_horr = FALSE, title_min = 4)+
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank())
+```
+
+# Res impact on streams/CLP
+
+## Inflow/Outflow Ratio
+
+
+```{r}
+
+
+joer_cbrr_ratios <- filter(tidy_chem, site_code %in% c("JOEI",
+                                                                "JOER",
+                                                                "CBRI",
+                                                                "CBRR",
+                                                                "CHD")& year(Date) %in% c(2021,2022))%>%
+      select(Date,site_code,ChlA)%>%
+  filter(!is.na(ChlA))%>%
+  # mutate(site_code = 
+  #          #found typo in dataset, corrected site name from CBRI to CBRR
+  #          case_when((Date == as.Date("2022-10-25")&ChlA == 3.92 ) ~ "CBRR" , 
+  #                              TRUE ~ site_code))%>%
+  pivot_wider(id_cols = Date, names_from = site_code, values_from = ChlA)%>%
+  mutate(jw_ratio = CBRI / JOEI,
+         chambers_ratio = CHD/ CBRI, 
+         Year = year(Date))
+
+#only grab Q data between the min and max dates in the ratios data set for each year
+site_Q21 <- CLP_daily_Q %>% filter(site_code %in% c("CBRI") & between(Date, min(joer_cbrr_ratios%>% filter(Year == 2021)%>%pull(Date)), max(joer_cbrr_ratios%>% filter(Year == 2021)%>%pull(Date))))
+site_Q22 <- CLP_daily_Q %>% filter(site_code %in% c("CBRI") & between(Date, min(joer_cbrr_ratios%>% filter(Year == 2022)%>%pull(Date)), max(joer_cbrr_ratios%>% filter(Year == 2022)%>%pull(Date))))
+site_Q <- bind_rows(site_Q21, site_Q22)
+
+# Combine data for plotting
+combined_data <- full_join(
+  joer_cbrr_ratios %>% filter(Date != "2022-06-14"),
+  site_Q,
+  by = "Date"
+)%>%
+  select(Date:chambers_ratio, Q_cfs, site_code)%>%
+  mutate(site_code = case_when(site_code == "CBRI" ~ "Joe Wright Outflow",
+                          site_code == "CHD" ~ "Chambers Outflow"))
+# Create the combined plot
+combined_plot <- ggplot(combined_data) +
+  # Plotting the Q values
+  geom_ribbon(aes(x = Date, ymin=0, ymax = Q_cfs/20, colour = site_code), linetype = "solid") +
+  # Plotting the ratios
+  geom_path(aes(x = Date, y = jw_ratio, colour = "Joe Wright"), size = 3) +
+  #geom_path(aes(x = Date, y = chambers_ratio, colour = "Chambers"), size = 3) +
+  #eom_point(aes(x = Date, y = chambers_ratio, size = CBRR, colour = "Chambers")) +
+  geom_point(aes(x = Date, y = jw_ratio, size = JOER, colour = "Joe Wright")) +
+  # Adding the inflow/outflow ratio line
+  geom_abline(aes(slope = 0, intercept = 1), color = 'black', linetype = "solid") +
+  
+  # Customizing size and color scales
+  scale_size_continuous(range = c(2, 17)) +
+  scale_y_continuous(
+    name = "Ratio: Outflow Chl-a / Inflow Chl-a",
+    sec.axis = sec_axis(~ . * 20, name = "Daily Flow (cfs)")
+  ) +
+  scale_color_manual(name = "Series",
+                     values = c("Chambers" = "#E69F00", 
+                                "Joe Wright" = "#56B4E9",
+                                "Joe Wright Outflow" = "blue4", 
+                                "Chambers Outflow" = "orange4")) +
+  # Adding labels and themes
+  labs(size = "Chl-a Levels at Reservoir",
+       colour = "Series",
+       x = "Date",
+       y = "Values") +
+  theme_bw(base_size = 25) +
+  facet_wrap(~year(Date), scales = "free_x") +
+  theme(
+    legend.position = "right",
+    axis.title = element_text(face = "bold"),
+    axis.text.x = element_text(face = "bold")
+  )
+
+# Print the combined plot
+print(combined_plot)
+
+
+
+  ggarrange(res_ratio_plot, Q_plot, ncol = 1, nrow = 2)
+#ggsave("output/Res_Ratio.jpg",width = 22, height = 14)
+plot(res_ratio_plot)
+
+
+```
+
+## Longitudinal
+
+<!-- Not yet working -->
+
+<!-- ```{r} -->
+<!-- source("paper_analysis/functions/build_long_plot.R") -->
+
+<!-- #Stuff for testing -->
+
+<!-- choosen_dates_chambers <- as.Date(c(#"2022-06-01", -->
+<!--   "2022-06-14", -->
+<!--   #"2022-07-05", -->
+<!--   "2022-07-26", -->
+<!--   "2022-08-16", -->
+<!--   #"2022-08-23",   -->
+<!--   #"2022-08-30", -->
+<!--   #"2022-09-06", -->
+<!--   #"2022-09-13", -->
+<!--   # "2022-09-20", -->
+<!--   "2022-09-27", -->
+<!--   #"2022-10-04", -->
+<!--   #"2022-10-11", -->
+<!--   "2022-10-18" -->
+<!--   #"2022-10-25", -->
+<!--   #"2022-11-01" -->
+<!-- )) -->
+
+<!-- chambers_dates_2023 <- c("2023-06-09","2023-06-15",  -->
+<!--                          "2023-09-05",  -->
+<!--                          #"2023-09-21",  -->
+<!--                          "2023-10-05",  -->
+<!--                          #"2023-10-10",  -->
+<!--                          "2023-10-16") -->
+
+
+<!--     #chambers dataframe -->
+<!--     chambers_longitudinal <- tidy_chem %>% -->
+<!--       dplyr::filter(!is.na(ChlA)) %>% -->
+<!--       dplyr::filter(site_code %in% c("JOEI", "JOER", "CBRR", "CBRI", "CHD")) %>% -->
+<!--       dplyr::filter(Date %in% chambers_dates_2023)%>% -->
+<!--       mutate(Date=as.character(Date), -->
+<!--              location_type = ifelse(location == "Outflow"|location =="Inflow", "Stream", "Reservoir")) -->
+
+<!--     ###PLOTING PART OF FUNCTION -->
+
+<!--     #chla graph -->
+<!--     chambers_chla_long <- chambers_longitudinal%>% -->
+<!--       ggplot(aes(x=Distance, y=ChlA, color=Date)) + -->
+<!--       geom_point( aes(shape = location_type), size=8, alpha = .7) + -->
+<!--       geom_line(aes(x=Xdistance), size=2, alpha = .7) + -->
+<!--       geom_point(aes(shape = location_type), size=8, alpha = .7) + -->
+<!--       scale_color_manual(values = season_color_vals)+ -->
+<!--       scale_fill_manual(values = season_color_vals)+ -->
+<!--       theme_bw(base_size=30) + -->
+<!--       labs(shape = "", color="") + -->
+<!--       theme(axis.text.x = element_blank(),  -->
+<!--             legend.text = element_text(size = 18)) + -->
+<!--       xlab("") + -->
+<!--       ylab("Chlorophyll a (μg/L)") -->
+
+<!--     #NO3 GRAPH -->
+<!--     chambers_no3_long <- chambers_longitudinal%>% -->
+<!--       ggplot(aes(x=Distance, y=NO3, color=Date)) + -->
+<!--       geom_point( aes(shape = location_type), size=8, alpha = .7) + -->
+<!--       geom_line(aes(x=Xdistance), size=2, alpha = .7) + -->
+<!--       geom_point(aes(shape = location_type), size=8, alpha = .7) + -->
+<!--       scale_color_manual(values = season_color_vals)+ -->
+<!--       scale_fill_manual(values = season_color_vals) + -->
+<!--       theme_bw(base_size=30) + -->
+<!--       theme(legend.text = element_text(size =18))+ -->
+<!--       labs(shape = "", color="") + -->
+<!--       scale_x_discrete(labels=c("1 - JOEI" = "Above Joe Wright", "2 - JOER" = "", "3 - CBRI" = "Above Chambers", -->
+<!--                                 "4 - CBRR" = "", "5 - CHD" = "Below Chambers")) + -->
+<!--       xlab("Longitudinal Profile") + -->
+<!--       ylab("NO3 (mg/L)") -->
+
+
+<!--     chambers_plot <- ggarrange(chambers_chla_long,chambers_no3_long, ncol=1, nrow=2, common.legend=T) -->
+
+<!--     chambers_plot -->
+
+<!-- ggsave("data/figs_output/2023_figs/jwc_long_2023.jpg", width = 15, height  = 10, dpi = 300) -->
+
+<!-- # 2023 weeks "28" "31" "36" -->
+<!-- #2022 weeks "22","28","32", "38", "42" -->
+
+<!-- ``` -->
+
+## Joe Wright Creek
+
+```{r}
+#Seasonal Color values
+month_color_vals <- c("5" = "#03045e",  "6" = '#047E82', "7" = '#397534', "8" = '#59B851', "9" = '#DEB907', "10" ='#FA850E', "11" = "#772f1a")
+season_color_vals <- c("Spring" = "#047E82", "Summer" = "#397534", "Fall" = "#FA850E")
+
+jwc_longitudinal <- tidy_chem %>%
+  dplyr::filter(!is.na(ChlA)) %>%
+  dplyr::filter(site_code %in% c("JOEI", "JOER", "CBRR", "CBRI", "CHD"))%>%
+  select(Date,site_code, ChlA, NO3, Year, location_type)%>%
+  mutate(location_type = ifelse(location_type == "Outflow"|location_type =="Inflow", "Stream", "Reservoir"),
+         Year = as.character(Year), 
+         month = as.character(month(Date, label = F)), 
+         season = case_when(
+           month %in% c("5", "6") ~ "Spring",
+           month %in% c("7", "8") ~ "Summer",
+           month %in% c("9", "10", "11") ~ "Fall")
+  )
+
+  jwc_longitudinal$site_code <- factor(jwc_longitudinal$site_code, levels = c("JOEI", "JOER", "CBRI", "CBRR", "CHD"))
+  jwc_longitudinal$season <- factor(jwc_longitudinal$season, levels = c("Spring", "Summer", "Fall"))
+  jwc_longitudinal$month <- factor(jwc_longitudinal$month, levels = c("5", "6", "7", "8", "9", "10","11"))
+# Calculate the medians for ChlA
+median_data <- jwc_longitudinal %>%
+  group_by(site_code, Year, location_type) %>%
+  summarise(median_ChlA = median(ChlA, na.rm = TRUE), 
+            median_NO3 = median(NO3, na.rm = TRUE)) %>%
+  ungroup()
+
+# Create the plot
+jwc_long_chla <-  ggplot(jwc_longitudinal, aes(x = site_code, y = ChlA, shape = location_type, color = season)) + 
+  geom_jitter(size = 3, width = 0.2) +
+  scale_color_manual(values = season_color_vals)+
+  # Add crossbars for the medians
+  #stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black") +
+  # Add lines connecting the medians
+  geom_line(data = median_data, aes(x = site_code, y = median_ChlA, group = Year), color = "black", linewidth = 1) +
+  geom_point(data = median_data, aes(x = site_code, y = median_ChlA, group = Year), color = "black", size = 3) +
+  theme_bw(base_size = 20) +
+  facet_wrap(~Year) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        legend.position = "none", 
+        legend.title = element_blank())
+  
+    jwc_long_no3 <- ggplot(jwc_longitudinal, aes(x=site_code,y=NO3, shape = location_type, color = season)) + 
+    geom_jitter(size = 3, width = 0.2)+
+     scale_color_manual(values = season_color_vals)+
+    #add a Hline for the median
+   #stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black") +
+      geom_line(data = median_data, aes(x = site_code, y = median_NO3, group = Year), color = "black", linewidth = 1) +
+  geom_point(data = median_data, aes(x = site_code, y = median_NO3, group = Year), color = "black", size = 3) +
+  theme_bw(base_size = 20) +
+  facet_wrap(~Year) +
+    theme_bw(base_size = 20)+
+    facet_wrap(~Year)+
+    theme(axis.title.x = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          #remove facet title
+          strip.text.x = element_blank(),
+          legend.position = "none") +
+    scale_x_discrete(labels=c("JOEI" = "Above Joe Wright", "JOER" = "", "CBRI" = "Above Chambers",
+                              "CBRR" = "", "CHD" = "Below Chambers")) 
+    
+jwc_long_chla_no3<-  ggarrange(jwc_long_chla, jwc_long_no3, ncol=1, nrow=2, common.legend=T)
+ save_plot_image(jwc_long_chla_no3 ,"jwc_long_chla_no3" )
+    
+    
+```
+
+
+## CLP
+
+```{r}
+
+#Seasonal Color values
+season_clp_color_vals <- c("Winter" = "#03045e",  "Rising Limb" = '#047E82',  "Peak Flow" = '#59B851', "Falling Limb"='#FA850E', "Fall" = "#772f1a")
+season_color_vals <- c("Spring" = "#047E82", "Summer" = "#397534", "Fall" = "#FA850E")
+
+clp_long <- tidy_chem %>%
+  dplyr::filter(!is.na(ChlA)& Year %in% c(2022, 2023)) %>%
+  dplyr::filter(site_code %in% c("JOEI", "JOER", "CBRR", "CBRI", "CHD", "JWC", "PFAL", "SLEP", "PBR", "PSF", "PNF", "PBD"))%>%
+  select(site_code,Date, watershed, distance_upstream_km, ChlA, NO3, PO4, K, burn_status, location_type,Year )%>%
+  mutate(location_type = case_when(
+    location_type %in% c("Inflow", "Outflow") ~ "Res Stream", 
+    location_type %in% c("Reservoir") ~ "Reservoir",
+    TRUE ~ "Mainstem"),
+         Year = as.character(Year), 
+         month = as.character(month(Date, label = F)),
+         season = case_when(
+           month %in% c("3", "4") ~ "Rising Limb", 
+           month %in% c( "5","6") ~ "Peak Flow",
+           month %in% c("7", "8") ~ "Falling Limb",
+           month %in% c("9", "10", "11") ~ "Fall", 
+           TRUE ~ "Winter"),
+            dist_pbd = as.character(distance_upstream_km),
+               site_code  = case_when(site_code == "PFAL" ~ "SLEP", TRUE ~ site_code),
+               type = ifelse(location_type %in% c("Inflow","Outflow"),"Stream",
+                             ifelse(location_type == "Reservoir", "Reservoir", "Mainstem")))
+
+
+
+  clp_long$site_code <- factor(clp_long$site_code, levels = c("JOEI", "JOER", "CBRR", "CBRI", "CHD", "JWC", "PFAL", "SLEP", "PBR", "PSF", "PNF", "PBD"))
+  clp_long$season <- factor(clp_long$season, levels = c("Winter", "Rising Limb", "Peak Flow", "Falling Limb", "Fall"))
+  clp_long$month <- factor(clp_long$month, levels = c("5", "6", "7", "8", "9", "10","11"))
+  
+  
+# Calculate the medians for ChlA
+clp_median_data <- clp_long %>%
+  group_by(site_code,distance_upstream_km, Year, location_type) %>%
+  summarise(median_ChlA = median(ChlA, na.rm = TRUE), 
+            median_NO3 = median(NO3, na.rm = TRUE)) %>%
+  ungroup()
+
+
+# Create the plot
+clp_long_chla <-  ggplot(clp_long, aes(x = distance_upstream_km, y = ChlA, shape = location_type, color = season)) + 
+  geom_jitter(size = 3, width = 0.2) +
+  scale_color_manual(values = season_clp_color_vals)+
+  # Add crossbars for the medians
+  #stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black") +
+  # Add lines connecting the medians
+  geom_line(data = clp_median_data, aes(x = distance_upstream_km, y = median_ChlA, group = Year), color = "black", linewidth = 1) +
+  geom_point(data = clp_median_data, aes(x = distance_upstream_km, y = median_ChlA, group = Year), color = "black", size = 3) +
+  theme_bw(base_size = 20) +
+    scale_x_reverse()+
+  facet_wrap(~Year, ncol = 1 ) +
+  theme(axis.title.x = element_blank())
+        #axis.text.x = element_blank(),
+        #legend.position = "none", 
+        #legend.title = element_blank())
+
+save_plot_image(clp_long_chla, "clp_long_chla")
+
+
+```
+
+
+<!-- ### Old plot for CLP Long -->
+<!-- ```{r} -->
+
+<!--     date_df <- tibble( date_col = as.Date(dates),  -->
+<!--                          wk =  as.character(week(date_col)), -->
+<!--                         year =as.character(year(date_col)), -->
+<!--                            wk_year = paste(year, wk),  -->
+<!--                        date_char = as.character(dates)) -->
+
+
+<!--     weeks_select2022 <- filter(date_df, year == 2022)%>% -->
+<!--       pull(wk) -->
+<!--     weeks_select2023 <- filter(date_df, year == 2023)%>% -->
+<!--       pull(wk) -->
+<!--     week_all <- date_df%>% pull(wk) -->
+
+
+<!--     longitudinal_res_mainstem <- filter(tidy_chem, Year %in% c(2022, 2023)& Date != "2022-09-19")%>% -->
+<!--       filter ( site_code %in% c("JOEI","JOER","CBRI","CBRR","CHD", "JWC", "SLEP", "PFAL", -->
+<!--                                 "PBR","PSF","PNF","PBD") & !is.na(ChlA))%>% -->
+<!--       select(site_code,Date, distance_upstream_km, ChlA, NO3, PO4, K, burn_status, location_type, watershed )%>% -->
+<!--       mutate(wk = as.character(week(Date))) -->
+<!--     # %>% -->
+<!--     #   filter(wk %in% weeks_select2022 ) -->
+
+<!--     longitudinal_res_mainstem_both <- filter(tidy_chem, Year == "2023")%>% -->
+<!--       filter ( site_code %in% c("JOEI","JOER","CBRI","CBRR","CHD", "JWC", "SLEP", "PFAL", -->
+<!--                                 "PBR","PSF","PNF","PBD"))%>% -->
+<!--       select(site_code,Date, watershed, distance_upstream_km, ChlA, NO3, PO4, K, burn_status, location_type )%>% -->
+<!--       mutate(wk = as.character(week(Date)))%>% -->
+<!--       #filter(wk %in% weeks_select2023 )%>% -->
+<!--         rbind(longitudinal_res_mainstem_2022)%>% -->
+<!--         mutate(dist_pbd = as.character(distance_upstream_km), -->
+<!--                site_code  = case_when(site_code == "PFAL" ~ "SLEP", TRUE ~ site_code), -->
+<!--                type = ifelse(location_type %in% c("Inflow","Outflow"),"Stream", -->
+<!--                              ifelse(location_type == "Reservoir", "Reservoir", "Mainstem"))) -->
+
+
+
+
+<!--     longitudinal_res_mainstem$wk <- factor(longitudinal_res_mainstem$wk, levels = week_all) -->
+<!--     longitudinal_res_mainstem$type <- factor(longitudinal_res_mainstem$type, levels = c("Stream", "Reservoir", "Mainstem")) -->
+
+
+<!--     long_clp_monthly <- filter(tidy_chem, !is.na(ChlA)& Year > 2021)%>% -->
+<!--       filter ( site_code %in% c("JOEI","JOER","CBRI","CBRR","CHD", "JWC", "SLEP", "PFAL", -->
+<!--                                 "PBR","PSF","PNF","PBD"))%>% -->
+<!--       select(site_code,Date, watershed, distance_upstream_km, ChlA, NO3, burn_status, location_type, Year )%>% -->
+<!--       mutate(month = month(Date,label= TRUE,  abbr = TRUE), -->
+<!--              month_num = month(Date),  -->
+<!--              dist_pbd = distance_upstream_km, -->
+<!--              site_code  = case_when(site_code == "PFAL" ~ "SLEP", TRUE ~ site_code), -->
+<!--              type = ifelse(location_type %in% c("Inflow","Outflow"),"Stream", -->
+<!--                              ifelse(location_type == "Reservoir", "Reservoir", "Mainstem")))%>% -->
+<!--       filter(month_num > 5 & month_num < 11)%>% -->
+<!--       group_by(Year, month, site_code, type, dist_pbd)%>% -->
+<!--       summarise(chla_median = median(ChlA, na.rm = TRUE),  -->
+<!--                 n_samples = n()) -->
+
+
+
+<!--     #graphing -->
+
+<!--     long_clp_graph_monthly <- long_clp_monthly%>% -->
+<!--       ggplot()+ -->
+<!--       geom_point(aes(x = dist_pbd, y= chla_median, shape = type, color = month), alpha = .9, size = 8)+ -->
+<!--       geom_line(aes(x = dist_pbd, y= chla_median, group = month, color =  month), size = 4, alpha = .8)+ -->
+<!--       geom_point(aes(x = dist_pbd, y= chla_median, shape = type, color = month), alpha = .9, size = 8)+ -->
+<!--       #gghighlight(wk == "30", use_direct_label = FALSE )+ -->
+<!--       theme_bw(base_size = 20)+ -->
+<!--       scale_x_reverse()+ -->
+<!--       scale_color_manual(name = "Month: ", values = c("Jun" = "#047E82", "Jul" = "#397534",  "Aug"= '#59B851', "Sep" = '#DEB907', "Oct" = '#FA850E' ))+ -->
+<!--       scale_shape_manual(values=c(17, 16, 15))+ -->
+<!--        scale_fill_manual( values = c("Jun" = "#047E82", "Jul" = "#397534",  "Aug"= '#59B851', "Sep" = '#DEB907', "Oct" = '#FA850E'  ))+ -->
+<!--       # # scale_color_manual(name = "Week of", values = c("6-01" = "#047E82", "7-11" = "#397534", "7-25"='#59B851', "8-08"= '#DEB907' ))+ -->
+<!--       labs(shape = "Site Type", color="", fill ="") + -->
+<!--       theme(legend.justification = c(.9,.9) , legend.position = c(.9, .9), -->
+<!--             #legend.box.background  = element_rect(color = "black",size = 1.5), -->
+<!--             axis.title = element_text(face = "bold"), -->
+<!--             axis.text.x = element_text(face = "bold"))+ -->
+<!--       #theme(axis.text.x = element_blank()) + -->
+<!--       xlab("Distance from Canyon Mouth (km)") + -->
+<!--       ylab("Chlorophyll a (μg/L)")+ -->
+<!--       facet_wrap(~Year, nrow = 2) -->
+
+<!--    long_clp_graph_monthly -->
+<!--     ggsave("data/figs_output/2023_figs/long_clp_monthly.jpg", width = 20, height = 15, dpi = 300) -->
+
+<!-- ``` -->
+
+
+
+## S.Fork 
+
+Reservoirs filled vs empty comparison
+
+```{r}
+source("paper_analysis/functions/sf_res_impact_plot.R")
+
+# sf_plots <- map(.x = all_params, .f = plot_sf_impact)
+# walk(sf_plots, plot)
+
+sf_chla <- plot_sf_impact(param = "ChlA")+
+#adding meso and eutrophic levels for cold lakes
+ geom_abline(aes(slope=0, intercept=2.6), color='black', linetype="dashed") +
+    geom_abline(aes(slope=0, intercept=8), color='black', linetype="dashed") +
+    #annotate(geom="text", label= "MDL Limit (μg/L)", x="CBRR 2022", y=.075, vjust= -1)+
+    annotate(geom="text", label= "Mesotrophic", x=.75, y=2.6, vjust= -1, size = 6)+
+    annotate(geom="text", label= "Eutrophic", x= .75, y=8, vjust= -1, size = 6)
+
+sf_no3 <- plot_sf_impact(param = "TSS")+
+  ylim(0,40)
+sf_no3
+# sf_k <- plot_sf_impact(param = "K")
+# sf_k
+  
+  
+
+ggsave("data/figs_output/2023_figs/sf_impact.jpg", width = 20, height  = 10, dpi = 300)
+
+
+
+sf_DTN<- plot_sf_impact(param = "DTN")
+sf_DTN
+
+
+no3_sf <- sf_impact_df(param = "NO3")%>%
+  filter(location_type %in% c("Reservoir"))
+t.test(NO3 ~ filled_status, data = no3_sf)
+
+chla_sf <- sf_impact_df(param = "ChlA")%>%
+  filter(site_code == "SFM")
+t.test(ChlA ~ filled_status, data = chla_sf)
+
+chla_beav <- sf_impact_df(param = "ChlA")%>%
+  filter(site_code == "BEAV")
+t.test(ChlA ~ filled_status, data = chla_beav)
+
+```
+
+
+
+

@@ -6,7 +6,7 @@ build_basic_chem_plot <-  function(sites, param, title = FALSE, style = "timelin
   
   chem_data <- tidy_chem%>%
     filter(site_code %in% sites)%>%
-    select(-c(FCW_Number, data_source, Lat, Long, Time, Field_DO_mgL, `Field_Cond_µS/cm`, Field_Temp_C, dt, Campaign, distance_upstream_km, watershed))%>%
+    select(site_code, Date, Year, Watershed_Level,ChlA, Turbidity, TSS, pH,ANC, Na, NH4, K, Mg, Ca, F, Cl, PO4, SO4, SC,NO3, DOC, DTN, order)%>%
     pivot_longer(cols = c(ChlA, Turbidity, TSS, pH,ANC, Na, NH4, K, Mg, Ca, F, Cl, PO4, SO4, SC,NO3, DOC, DTN),names_to = "parameter", values_to = "value")
   
   
@@ -94,5 +94,5 @@ build_basic_chem_plot <-  function(sites, param, title = FALSE, style = "timelin
 }
 
 #testing
-#test<- build_basic_chem_plot(sites = mainstem_Res_only, param = "NO3", title = FALSE, style = "boxplot", graph_size = 20)
-#plot(test)
+test<- build_basic_chem_plot(sites = mainstem_Res_only, param = "NO3", title = FALSE, style = "boxplot", graph_size = 20)
+plot(test)

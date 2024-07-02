@@ -1,0 +1,296 @@
+---
+title: "testing"
+author: "Sam Struthers"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+source("paper_analysis/00_analysis_setup.R")
+
+#basic function to save a plot in standard size, dpi and width into figures folder
+save_plot_image<- function(plot,name){
+  
+  ggsave(paste0("data/figs_output/2024_figs/",name,".jpg"), dpi = 300, width = 18, height = 10)
+  
+}
+
+```
+
+# Grab data
+
+```{r}
+
+#discrete sample data and location metadata from most recent pub
+
+DOI = "11110885"
+data_version = "v2024.04.16b"
+
+
+source("paper_analysis/functions/grab_zenodo_data.R")
+
+ all_params <- chem_units%>%
+  pull(simple)
+ 
+ tidy_chem <- most_recent_chem%>%
+  #remove random pre fire data and remove 2024 data which will be omitted from publication
+  filter(Year > 2020 & Year != 2024)%>%
+  # pfal + slep represent the same site but were moved to match future sensor location
+  mutate(distance_upstream_km = case_when(site_code == "PFAL" ~ 73.9, TRUE ~ distance_upstream_km))%>%
+  # add order table which gives the sites an order to be plotted in
+  left_join(order_table, by = "site_code")%>%
+  mutate(n_nh4 = NH4 * 0.7765, 
+         n_no3 = NO3 * 0.2259, 
+         DIN = n_nh4 + n_no3,
+         DON = DTN - DIN)
+
+
+#site order now added to tidy chem and thus not needed
+rm(order_table, most_recent_chem, DOI, data_version)
+print("Data Successfully loaded for analysis")
+```
+
+## Run above to get data loaded
+
+```{r}
+
+```
+
+
+# Testing New Ideas:
+- DOC in lakes 
+  does high DOC in reservoirs result in lower chla?
+  - look at chla vs DOC in lakes
+  
+## Chla vs DOC and NO3:
+  No huge pattern
+```{r}
+ggplot(data = filter(tidy_chem, site_code %in% c("CBRR", "JOER","BRNR","LNGR", "PTRR", "COMR", "HORR")), aes(x = ChlA, y = DOC, color = site_code))+ 
+  geom_point()+
+  scale_color_manual(values = colorsBS_site_code)+
+  facet_wrap(~Year)+
+  #geom_smooth(method = "lm")+
+  theme_bw()
+
+#chla no3 relationship
+ggplot(data = filter(tidy_chem, site_code %in% c("CBRR", "JOER","BRNR","LNGR", "PTRR", "COMR", "HORR")), aes(x = ChlA, y = NO3))+
+  geom_point()+
+  scale_color_manual(values = colorsBS_site_code)+
+  #facet_wrap(~Year)+
+  geom_smooth(method = "lm")+
+  theme_bw()
+
+no3_rolling <- tidy_chem%>%
+  filter(site_code %in% c("CBRR", "JOER","BRNR","LNGR", "PTRR"))%>%
+  select(site_code, Date, NO3, ChlA, Year)
+
+all_no3 <- tibble()
+
+for(yr in unique(no3_rolling$Year)){
+  
+for(i in unique(no3_rolling$site_code)){
+  site_year <- no3_rolling%>%
+    filter(site_code == i & Year == yr )%>%
+     arrange(site_code, Date)%>%
+  mutate(back1_no3 = dplyr::lag(NO3, n = 1), 
+         back1_chla = dplyr::lag(ChlA, n = 1),
+         slope1_no3 = (NO3 - back1_no3)/2,
+         slope1_chla = (ChlA - back1_chla)/2)
+  
+  all_no3 <- bind_rows(all_no3, site_year)
+}
+}
+ 
+ggplot(data = all_no3, aes(x = slope1_no3, y = slope1_chla, color = site_code))+
+  geom_point()+
+  #add 1:1 line
+  geom_abline(intercept = 0, slope = 0, linetype = "solid", color = "red")+
+  #add vertical line at x = 0
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue")+
+  scale_color_manual(values = colorsBS_site_code)+
+  facet_wrap(~site_code)+
+  theme_bw()
+
+
+
+```
+
+
+## Nitrogen stuff!!
+
+```{r}
+
+chem_n <- tidy_chem%>%
+  filter(watershed %nin% c("CLP Mainstem - Lower","CLP Tributary - Lower"))%>%
+  filter(!is.na(NO3)& !is.na(DTN) & !is.na(NH4))%>%
+  mutate(n_nh4 = NH4 * 0.7765, 
+         n_no3 = NO3 * 0.2259, 
+         DIN = n_nh4 + n_no3,
+         DON = DTN - DIN)
+
+# DIN vs DON
+ggplot(data = chem_n, aes(x = DIN, y = DON, colour = location_type))+
+  geom_point()+
+  facet_wrap(~watershed)+
+  theme_bw()
+
+means_n <- filter(chem_n, watershed %nin% c("CLP Mainstem - Upper", "CLP Tributary - Upper"))%>%
+  group_by(site_code, Year, Watershed_Level, watershed)%>%
+  summarise(mean_NO3 = mean(NO3, na.rm = TRUE),
+            mean_DON = mean(DON, na.rm = TRUE),
+            mean_DIN = mean(DIN, na.rm = TRUE), 
+            mean_DTN = mean(DTN, na.rm = TRUE))
+
+#TDN and NO3 on log scale with burn metric 
+
+ggplot(data = means_n, aes(x = Watershed_Level , y = mean_DTN))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Year)+
+  theme_bw()
+
+
+```
+
+
+## Flow impact on river WQ
+
+```{r}
+
+
+library(cdssr)
+
+
+clp_structures <- cdssr::get_structures(water_district = 3)
+
+our_res <- clp_structures%>%
+  filter(wdid %in% c("0303679","0303683", "0303678","0303677", "0303676", "0303720", "0303686"))%>%
+  select(wdid, structure_name)%>%
+  mutate(site_code = case_when(structure_name == "LONG DRAW RESERVOIR" ~ "LNGR",
+                               structure_name == "MOUNTAIN SUPPLY RES 20" ~ "JOER",
+                               structure_name == "BIG BEAVER RES" ~ "HORR",
+                               structure_name == "BARNES MEADOW RESERVOIR" ~ "BRNR",
+                               structure_name == "PETERSON LAKE RES" ~ "PTRR",
+                               structure_name == "COMANCHE RES" ~ "COMR",
+                               structure_name == "CHAMBERS LAKE RES" ~ "CBRR", 
+                               TRUE ~NA))
+
+
+get_res_volume <- function(id = "0303679"){
+  res_volume <- cdssr::get_structure_stage_ts(wdid = id, start_date = "2019-11-01", end_date = "2023-12-31")%>%
+  arrange(datetime)%>%
+    mutate(change = volume - lag(volume, n = 1),
+           days = as.numeric(difftime(datetime, lag(datetime, n = 1), units = "days")),
+           daily_change = change/days)
+  return(res_volume)
+}
+
+res_storage_tidy <- map_dfr(our_res$wdid, get_res_volume)%>%
+  left_join(our_res, by = "wdid")%>%
+  mutate(day_of_year = yday(datetime))
+
+
+get_res_dev_rel <- function(id = "0303679"){
+  res_dv <- cdssr::get_structures_divrec_ts(wdid = id, start_date = "2019-11-01", end_date = "2023-12-31", timescale = "day")
+  res_rel <- cdssr::get_structures_divrec_ts(wdid = id, wc_identifier = "release", start_date = "2019-11-01", end_date = "2023-12-31", timescale = "day")
+  
+  res_dv_rel <- bind_rows(res_dv, res_rel)
+  return(res_dv_rel)
+}
+
+res_diversions_releases <- map_dfr(our_res$wdid, get_res_dev_rel)%>%
+  left_join(our_res, by = "wdid")%>%
+  mutate(day_of_year = yday(datetime), 
+         #if wc_identifier contains "Release", type is release
+         type = ifelse(str_detect(wc_identifier, "Release"), "release", "diversion"))
+
+ggplot(data = res_diversions_releases%>%filter(site_code == "BRNR"& year(datetime)!=2019), aes(x = yday(datetime), y = data_value, color = type))+
+  geom_point()+
+  #geom_line(data = JOEO_Q, aes(x = date, y = JOEO_Q_cfs), color = "black")+
+  labs( x = "Day of Year", y = "Outflow (cfs)")+
+  facet_wrap(~year(datetime))+
+  theme_bw()
+
+
+upper_Q_gauges <- tidy_chem%>%
+  filter(!is.na(flow_gauge_id)&flow_gauge_source != "Larimer County")%>%
+  select(site_code, flow_gauge_id, flow_gauge_source)%>%
+  distinct()%>%
+  mutate(flow_gauge_id = ifelse(flow_gauge_source == "USGS", paste0("0",flow_gauge_id), flow_gauge_id))%>%
+  select(site_cd = site_code, id = flow_gauge_id, source = flow_gauge_source)
+
+grab_daily_q <- function(site_cd, id, source){
+  
+  if(source == "USGS"){
+    q_data <- readNWISdv(siteNumbers = id,startDate = "2019-01-01",endDate = "2023-12-31" ,  parameterCd = "00060")%>%
+    select(source = agency_cd,site = site_no,Date,
+           Q_cfs = X_00060_00003, Q_flag = X_00060_00003_cd)%>%
+    distinct()%>%
+    mutate( site_code = site_cd )
+    
+} else if(source == "CDWR"){
+  q_data <- cdssr::get_sw_ts(abbrev = id, start_date = "2019-11-01", end_date = "2023-12-31")%>%
+    mutate(Q_cfs = value, 
+           site_code = site_cd, 
+           Q_flag = paste(flag_a, flag_b, sep = "-"))%>%
+    distinct()%>%
+    select(Date = datetime, Q_cfs, site_code, site = abbrev, source = data_source, Q_flag)
+  }
+  return(q_data)
+}
+
+
+CLP_daily_Q <- pmap_dfr(upper_Q_gauges, grab_daily_q)%>%
+  filter(!grepl('Ice', Q_flag) & !grepl('Ssn', Q_flag)& Q_cfs > 0)%>%
+  left_join(tidy_chem, by = c("site_code", "Date"))
+
+some_CLP_daily_Q <- filter(CLP_daily_Q, site_code %nin% c("lincoln", "ELC", "boxelder")& Date > as.Date("2021-03-01"))%>%
+  filter(site_code %in%c("CHD", "PBD") )
+
+
+ggplot(some_CLP_daily_Q, aes(Date, Q_cfs))+
+  geom_line(aes(color = site_code))+
+  geom_point(data = some_CLP_daily_Q%>%filter(!is.na(Site)), aes(fill = ChlA, size = NO3, shape = site_code))+
+  scale_fill_continuous(limits = c(0, 4), low = "blue", high = "green")+
+  #add a vertical line for every day there site_name is not NA
+  #geom_vline(data = some_CLP_daily_Q%>%filter(!is.na(Site)), aes(xintercept = as.numeric(Date)), color = "red")+
+  labs(x = "Date", y = "Flow (cfs)", color = "ChlA", size = "NO3")+
+  #facet_wrap(~site_code, scales = "free_y")+
+  theme_bw()
+  
+  prop_chd_pbd <- left_join(chd_Q, pbd_Q, by = "date")%>%
+    mutate(prop_chd_pbd = chd_Q_cfs / pbd_Q_cfs, 
+           prop_chd_pbd =ifelse(prop_chd_pbd>=1, 1, prop_chd_pbd), 
+           month = as.character(month(date)),
+           season = case_when(
+          month %in% c( "12", "1", "2", "3") ~ "Winter",
+           month %in% c("4", "5", "6") ~ "Spring",
+           month %in% c("7", "8") ~ "Summer",
+           month %in% c("9", "10","11") ~ "Fall")
+    )
+ 
+
+  ggplot(tidy_chem%>%filter(location_type == "Reservoir"), aes(x = ChlA, TSS, color = location_type))+
+    geom_point()+
+    geom_smooth(method = "lm")+
+    ylim(0,50)+
+    theme_bw()
+  
+  
+  
+chem_to_join <- tidy_chem%>%
+  filter(site_code %in% c( "JWC", "PBR", "PBD"))%>%
+  mutate(date = as.POSIXct(Date))
+
+chem_q_join <- left_join(prop_chd_pbd, chem_to_join, by = "date")%>%
+  filter(season %nin% c("Winter"))
+
+
+ggplot(chem_q_join, aes(x = prop_chd_pbd)) +
+  geom_point(aes(y = ChlA, shape = site_code, color = season), size = 5)+
+  theme_bw(base_size = 20)
+
+```
+
+
