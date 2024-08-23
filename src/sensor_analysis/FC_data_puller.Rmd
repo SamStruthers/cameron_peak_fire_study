@@ -1,0 +1,301 @@
+---
+title: "Fort Collins Sonde Data"
+author: "Sam Struthers- CSU ROSSyndicate"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+Installing Packages and library necessary ones
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+### ----- Load packages ----- ###
+package_load <- function(package_names){
+  for(i in 1:length(package_names)){
+    if(!package_names[i] %in% installed.packages()){
+      install.packages(package_names[i])
+    }
+    library(package_names[i],character.only = TRUE)
+  }
+}
+#vector of packages
+pack_req <- c( "tidyverse","lubridate","padr","janitor","padr", "broom","arrow","zoo",
+  "rjson", "rvest", "dataRetrieval", "httr", "jsonlite", "RSelenium","devtools")
+package_load(pack_req)
+
+#Simple function to negate %in%
+`%nin%` = Negate(`%in%`)
+
+remove(pack_req, package_load)
+```
+This script will allow you to pull in sonde data from the City of Fort Collins Contrail site to access their sonde data from Manner's Bridge (site code: PMAN) and Indian Meadows (Site Code: PBR). This will grab all the available parameters from each sonde: Specific Conductivity, Turbidity, pH, Dissolved Oxygen, Temperature, and Stage. 
+
+NOTE: This is RAW data and may include errors!!
+
+# Set up user inputs
+
+Enter below where you want the data to be saved, what to save it as and the start + end dates of the pull
+
+
+```{r cars}
+#start date time in format: YYYY-MM-DD HH:MM:SS in Mountain Time
+start_DT <- "2024-08-01 12:00:00"
+#end date time in format: YYYY-MM-DD HH:MM:SS in Mountain Time
+#end_DT <- "2024-12-01 23:45:00"
+### Or use the current time by uncommenting the line below ### 
+end_DT <- as.character(round_date(Sys.time(), "15 minutes"))
+
+#Check to make sure the end DT is greater than the start DT
+if(as.POSIXct(end_DT) < as.POSIXct(start_DT)){
+  stop("End date is before start date")
+}
+
+
+# Where do you want it to be saved?
+folder_path <- "data/sensor_data/FC_sondes/"
+# what do you want to save the final dataset as?
+file_name <- "FC_sonde_data_2017_to_20240823"
+# What file format do you want (csv, xslx or RDS)
+format <- "RDS"
+
+# What type of system are you using?
+system <- "Mac" # Options are "Mac" or "PC" ... this is important!
+
+```
+
+Taking user input and converting it to the correct format and creating directory for data to be saved
+ 
+```{r}
+
+
+downloadPath <- file.path(getwd(), paste0(folder_path, "raw_data"))
+
+if(system == "PC") {downloadPath <- downloadPath %>% stringr::str_replace_all("/", "\\\\\\\\")}
+
+#Little code snippet to make the data folder if you don't have it. 
+if(!file.exists(downloadPath)){
+  dir.create(downloadPath)
+}
+```
+
+If you want to remove old data, uncomment the following line:
+```{r}
+# delete old instances of the download: 
+#do.call(file.remove, list(list.files(downloadPath, full.names = TRUE)))
+```
+
+
+# Setup R selenium and log into Contrail website
+
+```{r}
+
+creds = yaml::read_yaml("data/testing/credentials.yml") %>%
+  unlist()
+username = as.character(creds["username"])
+password = as.character(creds["password"])
+
+
+# make sure server downloads data into appropriate folder (i.e., our temporary folder)
+fprof <- RSelenium::makeFirefoxProfile(list(browser.download.dir = downloadPath,
+                                            browser.download.folderList = 2L,
+                                            browser.download.manager.showWhenStarting = FALSE,
+                                            browser.helperApps.neverAsk.openFile = "text/csv",
+                                            browser.helperApps.neverAsk.saveToDisk = "text/csv"))
+
+exCap <- list(firefox_profile = fprof$firefox_profile#,
+              # REMOVE  "Pop-up" CONSOLE:
+              #"moz:firefoxOptions" = list(args = list('--headless'))
+)
+
+
+# start up RSelenium session:
+
+rD <- RSelenium::rsDriver(browser = "firefox", port = sample.int(1000, 1), extraCapabilities = exCap)
+
+remDr <- rD$client
+
+# log in to contrail system using username and password
+remDr$navigate('https://contrail.fcgov.com/')
+Sys.sleep(1) # provide time for site navigation
+
+# Fill in username and password:
+dropper <- remDr$findElement(using = 'xpath', value = '//*[@id="username"]')
+Sys.sleep(1) # provide time for navigation and selection
+try(dropper$sendKeysToElement(list(paste0(username))))
+Sys.sleep(1)
+dropper <- remDr$findElement(using = 'xpath', value = '//*[@id="password"]')
+try(dropper$sendKeysToElement(list(paste0(password), key = "enter")))
+
+
+
+```
+
+
+# Pulling in the data
+
+Depending on the time frame you have selected, this may take a fair amount of time (~ 5 min per year). If you select a time period where there is no data, you will recieve a message "Data not available for this date range" but it should not error out. 
+Raw data will be saved to the folder you inputted above in a sub folder named `Raw Data`. If you selected multiple years, files will be saved with the '(i)'. I suggest runnning the following chunk before inspecting data. 
+
+```{r}
+
+FC_downloader <- function( start_DT, end_DT){
+  
+  # Convert the date string to URL-encoded format
+start_DT_encoded <- gsub(" ", "%20", start_DT)%>%gsub(":", "%3A", .)
+end_DT_encoded <- gsub(" ", "%20", end_DT)%>%gsub(":", "%3A", .)
+
+metas <- read_csv( paste0(file.path(getwd(), paste0(folder_path),'device_urls.csv')), show_col_types = F)%>%
+  mutate(encoded_url = paste0("https://contrail.fcgov.com/sensor/?time_zone=US%2FMountain",device_urls,"&bin=86400&range=Custom%20Range&markers=false&legend=true&thresholds=true&refresh=off&show_raw=true&show_quality=true&data_start=", start_DT_encoded, "&data_end=", end_DT_encoded))
+
+download_data <- function(encoded_url){
+
+remDr$navigate(encoded_url)
+Sys.sleep(5)
+
+
+apply_button <- tryCatch({
+ remDr$findElement(using = "xpath", value = '//*[@id="dropdown-button-action-download"]')
+
+}, error = function(e) {
+  print("Data not available for this date range")
+  return(NULL)
+  stop()
+})
+  if(is.null(apply_button)){
+   return(NULL)
+    stop()
+  }
+  Sys.sleep(1)  # Pause to ensure the element is interactable
+  apply_button$clickElement()
+  
+  # Attempt to find and click the "CSV" button
+  csv_button <- remDr$findElement(using = "xpath", value = "//a[contains(text(), 'CSV')]")
+  Sys.sleep(1)
+  csv_button$clickElement()
+  
+  Sys.sleep(5)  # Pause to allow for download or other processes
+
+}
+walk(metas$encoded_url, download_data)
+
+
+}
+
+#determine if there is more than 1 year's worth of data to grab (365 days)
+if(as.POSIXct(end_DT) - as.POSIXct(start_DT) > 365){
+  multiple_years <- TRUE
+  # split the start and end DT into 365 day chunks
+  split_dates <- data.frame(start_DT_seq = seq.POSIXt(as.POSIXct(start_DT), as.POSIXct(end_DT), by = "365 DSTdays"))%>%
+    mutate(end_DT_seq = lead(start_DT_seq - minutes(30), default = as.POSIXct(end_DT)))%>%
+    mutate(start_DT = as.character(start_DT_seq),
+           end_DT = as.character(end_DT_seq))%>%
+    select(start_DT, end_DT)
+ 
+}
+
+if(multiple_years){
+  for(i in 1:nrow(split_dates)){
+    start_DT <- split_dates[i,1]
+    end_DT <- split_dates[i,2]
+    #print(paste0(start_DT," end: ", end_DT))
+    FC_downloader(start_DT, end_DT)
+  }
+  #quit out of the RSelenium session
+  remDr$close()
+  rD[["server"]]$stop()
+
+}else{
+  FC_downloader(start_DT, end_DT)
+  #quit out of the RSelenium session
+  remDr$close()
+rD[["server"]]$stop()
+
+}
+
+
+
+# end the RSelenium server session
+#remDr$close()
+rD[["server"]]$stop()
+
+print('Download Complete')
+```
+
+
+# Tidying up data
+
+This chunk will read in the data, clean it up, and save it as a  file in the folder you specified above.
+This code will add the site codes/names to the file (Manners/PMAN, IndianMeadows/PBR), convert the reading time to MST and identify the parameter being measured.
+
+```{r}
+
+raw_files <- list.files(downloadPath, full.names = T)
+
+collate_sensor_data <- function(file){
+  
+  site_name <- ifelse(grepl("Manners", file), "Manners", "Indian Meadows")
+  site_cd <- ifelse(grepl("Manners", file), "PMAN", "PBR")
+  
+  data <- read_csv(file, show_col_types = F)%>%
+    mutate(DT_MT = force_tz(Reading, tzone = "America/Denver"), 
+           DT_mst = with_tz(DT_MT, tzone = "MST"),
+           parameter = case_when(Unit == "uS/cm" ~ "Specific Conductivity",
+                                  Unit == "mg/L" ~ "DO",
+                                  Unit == "ntu" ~ "Turbidity",
+                                  Unit == "pH" ~ "pH",
+                                  Unit == "C" ~ "Temperature",
+                                  Unit == "ft" ~ "Depth"), 
+           site = site_name, 
+           site_code = site_cd)%>%
+    drop_na(parameter)%>%
+    select(DT_mst, parameter, value = Value, `Data Quality`, site_code)
+  
+}
+
+all_data <- map(raw_files, collate_sensor_data)%>%
+  bind_rows()%>%
+  distinct()
+
+#save the consolidated file with the chosen name and format
+file_save <- file.path(getwd(), paste0(folder_path, file_name))
+if(system == "PC") {file_save <- file_save %>% stringr::str_replace_all("/", "\\\\\\\\")}
+
+if(format == "RDS"){
+  write_rds(all_data, paste0(file_save, ".RDS"))
+}
+if(format == "csv") {
+  
+  write_csv(all_data, paste0(file_save ,".csv"))
+}
+if(format == "xlsx") {
+  
+  write_xlsx(all_data, paste0(file_save, ".xlsx"))
+}
+
+```
+
+# Checking out the data
+
+```{r}
+#read in data
+if(format == "RDS"){
+  all_data <- read_rds( paste0(file_save, ".RDS"))
+}
+if(format == "csv") {
+  
+ all_data<- read_csv(paste0(file_save ,".csv"), show_col_types = F)
+}
+if(format == "xlsx") {
+  
+  all_data <- readxl::read_xlsx(paste0(file_save, ".xlsx"))
+}
+
+ggplot(all_data, aes(DT_mst, value, color = site_code))+
+  geom_point()+
+  facet_wrap(~parameter, scales = "free_y")+
+  theme_minimal()+
+  labs(title = "Sensor Data", x = "Date/Time (MST)", y = "Value", color = "Site")
+
+```
