@@ -1,0 +1,882 @@
+---
+title: "Checking out Q data"
+author: "Sam Struthers"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Script overview
+
+We will be looking at the available Q data from Larimer County (`https://larimerco-ns5.trilynx-novastar.systems/novastar/operator/map`), CDWR (<https://dwr.state.co.us/Tools/Stations>) and RMRS collected data to see how well they are related. Unfortunately, both of these services don't monitor many small tributaries so we will have to look at the most nearby site.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+package_load <- function(package_names){
+  for(i in 1:length(package_names)){
+    if(!package_names[i] %in% installed.packages()){
+      install.packages(package_names[i])
+    }
+    library(package_names[i],character.only = TRUE)
+  }
+}
+packages <- c("tidyverse","ggplot2", "readxl", "here", "arrow", "sf", "tmap","nhdplusTools")
+package_load(packages)
+
+#check if you have cdssr and devtools and install
+if (!requireNamespace("cdssr", quietly = TRUE)) {
+  if (!requireNamespace("devtools", quietly = TRUE)) {
+    install.packages("devtools")
+  }
+# install.packages("devtools")
+devtools::install_github("anguswg-ucsb/cdssr")  
+}
+library(cdssr)
+
+`%nin%` = Negate(`%in%`)
+#Load API key for CDWR
+cdwr_key <- yaml::read_yaml(here("creds/CDWRCreds.yml"))$api_key
+```
+
+### A note on Larimer Co Q
+
+From my conversations with the Larimer County folks, these station's rating curves are made from hydraulic modeling, so they are not based on actual measurements of Q and stage so we will take them with a grain of salt. Their stage data does appear to be pretty reliable as their goal is flood warning
+
+```{r}
+
+larimer_q <- read_parquet(here("data/collated/external_datasets/larimer_county_station_flow_precip_20210101_20251201.parquet"))%>%
+  filter(watershed %in% c( "Upper_CLP", "NF") & parameter == "q_cfs")
+
+larimer_sites <- distinct(larimer_q, lat, long, station_id,name)%>%
+  st_as_sf(coords = c("long", "lat"), crs = 4326)
+
+larimer_q <- larimer_q %>%
+  mutate(date = as_date(DT_mst), 
+         DT_round = floor_date(DT_mst, unit = "hour"))%>%
+  summarise(q_cfs = mean(value, na.rm = TRUE), .by = c(station_id, name, lat, long, date, DT_round))%>%
+  select(DT_round,date, abbrev = station_id, q_cfs, station_name = name)
+
+
+```
+
+```{r}
+# Read in Tim's Q and Sites
+rmrs_data <- read_excel(path = here("data/raw/external_datasets/flow_rmrs/CamPeak_Tributary_InstantaneousDischarge_Masterfile.xlsx"))%>%
+  mutate(Q_cfs_clean = as.numeric(Q_cfs))%>%
+  filter(!is.na(Q_cfs_clean))
+
+rmrs_sites <- read_sf(here("data/raw/external_datasets/flow_rmrs/Tributary Sampling Points.shp"))%>%
+  mutate(q_site = if_else(Name %in% unique(rmrs_data$Site), "YES", "NO"))%>%
+  st_transform(4326)
+```
+
+```{r}
+# Find UCLP CDWR sites
+
+cdwr_sites <- get_telemetry_stations(water_district = 3, api_key = cdwr_key)%>%
+  #get stream gage sites with data during study period and they are West of the canyon mouth gage
+  filter(station_type == "Stream Gage" & meas_date_time >= "2022-01-01" & longitude <= -105.22)%>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+# Pull in CDWR sites outside of CLP Basin that we may want to compare with (e.g. NF Big T, Big T above Estes)
+ext_cdwr_sites <- get_telemetry_stations(abbrev = c("BTNFDRCO","BTABESCO", "LARRIVCO"))%>%
+  #get stream gage sites with data during study period and they are West of the canyon mouth gage
+  filter(station_type == "Stream Gage" & meas_date_time >= "2022-01-01" & longitude <= -105.22)%>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+all_cdwr_sites <- bind_rows(cdwr_sites, ext_cdwr_sites)
+
+#Pull in data from all these sites between 2021-01-01 and 2024-12-01
+cdwr_data <- map2_dfr(all_cdwr_sites$abbrev, all_cdwr_sites$parameter,
+                      ~get_telemetry_ts(abbrev = .x,parameter = .y, 
+                                start_date = "2021-01-01", end_date = "2025-12-01", 
+                                timescale = "hour", 
+                                api_key = cdwr_key))%>%
+  select(abbrev,datetime, q_cfs = meas_value, flag = flag_b)%>%
+  mutate(DT_round = floor_date(with_tz(datetime, "MST"), unit = "hour"), 
+         date = as_date(DT_round),
+         q_cfs = if_else(!is.na(flag), NA_real_, q_cfs))
+
+#Special case for Laramie River since we will need to add in the Tunnel Flow to get close to "Natural" Flow
+
+laramie_river <- get_telemetry_ts(abbrev = "LARRIVCO",parameter = "DISCHRG", 
+                                start_date = "2021-01-01", end_date = "2025-12-01", 
+                                timescale = "hour", 
+                                api_key = cdwr_key)%>%
+  select(abbrev,datetime, q_cfs_natural = meas_value, flag = flag_b)%>%
+  mutate(DT_round = floor_date(with_tz(datetime, "MST"), unit = "hour"), 
+         date = as_date(DT_round),
+         q_cfs_natural = if_else(!is.na(flag), NA_real_, q_cfs_natural))
+
+tunnel <- get_telemetry_ts(abbrev = "LAPTUNCO",parameter = "DISCHRG", 
+                                start_date = "2021-01-01", end_date = "2025-12-01", 
+                                timescale = "hour", 
+                                api_key = cdwr_key)%>%
+  select(abbrev,datetime, q_cfs = meas_value, flag = flag_b)%>%
+  mutate(DT_round = floor_date(with_tz(datetime, "MST"), unit = "hour"), 
+         date = as_date(DT_round),
+         q_cfs_tunnel = if_else(!is.na(flag), 0, q_cfs))%>%
+  select(DT_round, q_cfs_tunnel)
+
+
+laramie_river_corr <- laramie_river%>%
+  left_join(tunnel, by = "DT_round")%>%
+  mutate(q_cfs = q_cfs_natural + q_cfs_tunnel)
+
+all_cdwr_data <- bind_rows(cdwr_data%>%filter(abbrev != "LARRIVCO"), laramie_river_corr%>%select(abbrev, date, datetime = DT_round, q_cfs, flag))%>%
+  left_join(all_cdwr_sites%>%select(abbrev, station_name)%>%st_drop_geometry(), by = "abbrev")
+
+```
+
+```{r, include=FALSE}
+
+flowlines <- map(c("CLAFTCCO","BTNFDRCO","BTABESCO", "LARRIVCO"), function(site_abbrev){
+  
+start_point <- all_cdwr_sites%>%filter(abbrev ==  site_abbrev)
+start_comid <- discover_nhdplus_id(start_point)
+
+flowline <- navigate_nldi(list(featureSource = "comid", 
+                               featureID = start_comid), 
+                          mode = "upstreamTributaries", 
+                          distance_km = 1000)
+
+subset <- subset_nhdplus(comids = as.integer(flowline$UT$nhdplus_comid),
+                         flowline_only = FALSE,
+                         nhdplus_data = "download",
+                         return_data = TRUE)
+#return flowlines in 4326 for mapping
+subset$NHDFlowline_Network%>%st_transform(4326)
+
+})%>%bind_rows()%>%
+  select(comid, gnis_name)
+```
+
+## Map of available sites
+
+```{r, include=FALSE}
+# Combine all sites into a single sf object with a common column for the legend
+larimer_sites <- larimer_sites %>%
+  mutate(Network = "Larimer Sites")
+cdwr_sites <- all_cdwr_sites %>%
+  mutate(Network = "CDWR Sites")
+rmrs_sites <- rmrs_sites %>%
+  mutate(Network = if_else(q_site == "YES", "RMRS Q Sites", "RMRS Non-Q Sites"))
+
+all_sites <- bind_rows(larimer_sites, cdwr_sites, rmrs_sites)
+```
+
+```{r}
+tmap_mode("view")
+
+ tm_basemap("CartoDB.Positron") +
+  tm_shape(flowlines) +
+  tm_lines(col = "blue") + 
+  tm_shape(all_sites) +
+  tm_symbols(
+    fill = "Network",
+    fill.scale = tm_scale_categorical(
+      levels = c("Larimer Sites", "CDWR Sites", "RMRS Q Sites", "RMRS Non-Q Sites"),
+      values = c("#256BF5", "green", "red", "#d9d9d9")
+    ),
+    fill.legend = tm_legend(title = "Monitoring Network")#,
+  )+
+  tm_layout(legend.outside = TRUE)
+```
+
+```{r}
+#Join all external Q into a single dataframe
+
+all_ext_q <- bind_rows(all_cdwr_data%>%mutate(source = "CDWR"), 
+                       larimer_q %>% mutate(source = "Larimer County"))%>%
+  mutate(log_q_cfs = if_else(q_cfs <= 1, NA,  log(q_cfs)))%>%
+  select(abbrev,station_name, date,DT_round, q_cfs, log_q_cfs, source)%>%
+  na.omit()
+
+stations <- distinct(all_ext_q, abbrev, station_name, source)
+  
+all_combos <- expand_grid(Site = unique(rmrs_data$Site), abbrev = unique(all_ext_q$abbrev))%>%
+   filter(abbrev %nin% c("11525","CLANLICO", "CLANSECO","LAPLODCO","NOCALACO","11530","JOEBELCO","JWCCHACO"), Site %nin% c("Fall"))
+
+all_site_wise_comps <- map2_dfr(all_combos$abbrev, all_combos$Site, function(abbrev_oi, site_oi){
+  
+  external <- all_ext_q%>%
+    filter(abbrev == abbrev_oi)%>%
+   summarise(daily_q = mean(q_cfs, na.rm = TRUE), .by = date) %>%
+  mutate(daily_log_q = log(daily_q + 0.001)) # Log of the mean + small constant for zeros
+
+joined <- rmrs_data %>%
+  filter(Site == site_oi) %>%
+  left_join(external, by = c("Date" = "date")) %>%
+  mutate(log_rmrs_q_cfs = log(Q_cfs_clean + 0.001)) %>%
+    select(Date,
+           external_q_cfs = daily_q, 
+           external_log_q_cfs = daily_log_q , 
+           rmrs_q_cfs = Q_cfs_clean, 
+           log_rmrs_q_cfs )%>%
+    mutate(year = as_factor(year(Date)))%>%
+    na.omit()
+  
+  if(nrow(joined) < 10){
+    return(tibble(abbrev = abbrev_oi, rmrs_site = site_oi, R2 = NA, logR2 = NA, log_log_R2 = NA))
+  }
+  
+   cor <- cor(joined$rmrs_q_cfs, joined$external_q_cfs, use = "complete.obs")
+   R2 <- cor^2
+   log_R2 <- cor(joined$rmrs_q_cfs, joined$external_log_q_cfs, use = "complete.obs")^2
+   log_log_R2 <- cor(joined$log_rmrs_q_cfs, joined$external_log_q_cfs, use = "complete.obs")^2
+   
+   tibble(abbrev = abbrev_oi, rmrs_site = site_oi, R2 = R2,logR2 = log_R2, log_log_R2 )
+   
+})%>%
+  left_join(stations, by = "abbrev")
+```
+
+## Heat Map of R2 between each RMRS site and each external site (CDWR and Larimer County)
+
+### Normal Q values
+
+```{r}
+
+max_r2_labels <- all_site_wise_comps %>%
+  group_by(rmrs_site) %>%
+  filter(R2 >= 0.8) %>%
+  ungroup()
+
+#order of rmrs sites by mean R2
+r2_order <- all_site_wise_comps%>%
+  summarise(mean_r2 = mean(R2, na.rm = TRUE), .by = rmrs_site)%>%
+  arrange(desc(mean_r2), na.rm = TRUE)%>%
+  pull(rmrs_site)
+
+r2_order_station <- all_site_wise_comps%>%
+  summarise(mean_r2 = mean(R2, na.rm = TRUE), .by = station_name)%>%
+  arrange(desc(mean_r2), na.rm = TRUE)%>%
+  pull(station_name)
+
+all_site_wise_comps%>%
+  mutate(rmrs_site = factor(rmrs_site, levels = r2_order), 
+         station_name = factor(station_name, levels = r2_order_station))%>%
+ggplot(., aes(x = rmrs_site, y = station_name, fill = R2)) +
+  geom_tile() +
+  # Add the 'X' label only for the max points 
+  geom_text(data = max_r2_labels, aes(label = "X"), color = "white", fontface = "bold") +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey90") +
+  labs(title = "R² of Q Comparisons (0.8 or greater Marked with X)",
+       x = "RMRS Site",
+       y = "External Site (Abbrev)",
+       fill = "R²") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here("docs/cpf_reservoir/figures/2026_figs/norm_norm_q_r2_heatmap_rmrs.png"), width = 10, height = 8)
+
+```
+### Normal RMRS Q and Log Gage Q values
+
+```{r}
+
+max_r2_labels <- all_site_wise_comps %>%
+  group_by(rmrs_site) %>%
+  filter(logR2 >= 0.8) %>%
+  ungroup()
+
+#order of rmrs sites by mean R2
+r2_order <- all_site_wise_comps%>%
+  summarise(mean_r2 = mean(logR2, na.rm = TRUE), .by = rmrs_site)%>%
+  arrange(desc(mean_r2), na.rm = TRUE)%>%
+  pull(rmrs_site)
+
+r2_order_station <- all_site_wise_comps%>%
+  summarise(mean_r2 = mean(logR2, na.rm = TRUE), .by = station_name)%>%
+  arrange(desc(mean_r2), na.rm = TRUE)%>%
+  pull(station_name)
+
+all_site_wise_comps%>%
+  mutate(rmrs_site = factor(rmrs_site, levels = r2_order), 
+         station_name = factor(station_name, levels = r2_order_station))%>%
+ggplot(., aes(x = rmrs_site, y = station_name, fill = logR2)) +
+  geom_tile() +
+  # Add the 'X' label only for the max points 
+  geom_text(data = max_r2_labels, aes(label = "X"), color = "white", fontface = "bold") +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey90") +
+  labs(title = "R² of Log Q Comparisons (0.8 or greater Marked with X)",
+       x = "RMRS Site",
+       y = "External Site LOGGED",
+       fill = "R²") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here("docs/cpf_reservoir/figures/2026_figs/norm_log_q_r2_heatmap_rmrs.png"), width = 10, height = 8)
+
+```
+
+### Log RMRS Q and Log Gage Q values
+
+```{r}
+
+max_r2_labels <- all_site_wise_comps %>%
+  group_by(rmrs_site) %>%
+  filter(log_log_R2 >= 0.8) %>%
+  ungroup()
+
+#order of rmrs sites by mean R2
+r2_order <- all_site_wise_comps%>%
+  summarise(mean_r2 = mean(log_log_R2, na.rm = TRUE), .by = rmrs_site)%>%
+  arrange(desc(mean_r2), na.rm = TRUE)%>%
+  pull(rmrs_site)
+
+r2_order_station <- all_site_wise_comps%>%
+  summarise(mean_r2 = mean(log_log_R2, na.rm = TRUE), .by = station_name)%>%
+  arrange(desc(mean_r2), na.rm = TRUE)%>%
+  pull(station_name)
+
+all_site_wise_comps%>%
+  mutate(rmrs_site = factor(rmrs_site, levels = r2_order), 
+         station_name = factor(station_name, levels = r2_order_station))%>%
+ggplot(., aes(x = rmrs_site, y = station_name, fill = logR2)) +
+  geom_tile() +
+  # Add the 'X' label only for the max points 
+  geom_text(data = max_r2_labels, aes(label = "X"), color = "white", fontface = "bold") +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey90") +
+  labs(title = "R² of Log-Log Q Comparisons (0.8 or greater Marked with X)",
+       x = "RMRS Site LOGGED",
+       y = "External Site LOGGED",
+       fill = "R²") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here("docs/cpf_reservoir/figures/2026_figs/log_log_q_r2_heatmap_rmrs.png"), width = 10, height = 8)
+```
+
+Unfortunately there isn't alot of reasonable overlap between sites but we can use the following for comparison:
+
+-    LBEA: CDWR site on SF
+
+-   FISH, PENN, BEAV: County site (11517) on SF
+
+-   BENN: County site (11518) on Bennett
+
+-    SEVN: County site (11519) on Sevenmile
+
+-   All sites vs Canyon Mouth to see how related they are with general basin Q
+
+# Timeseries of Q at each trib site
+
+```{r}
+
+ggplot(rmrs_data%>%mutate(doy = yday(Date)), aes(x = Date, y = Q_cfs_clean, color = doy)) +
+  geom_point() +
+  scale_color_continuous(low = "green", high = "red", name = "Day of Year") +
+  labs(title = "RMRS Q Time Series",
+       x = "Date",
+       y = "Q (cfs)") +
+  theme(legend.position = "bottom")+
+  facet_wrap(~Site, scales = "free_y")
+
+```
+
+
+
+# Comparisons
+
+## Little Beaver
+
+Unfortunately, the CDWR site wasn't installed until 2023 so we can only really compare 2023 & 2024. The South Fork site also includes reservoir releases from Comanche and Hourglass so it might not be the best comparison site
+
+```{r}
+
+cdwr_lbea <- cdwr_data%>%
+  filter(abbrev == "CLASRKCO")%>%
+  summarise(daily_q = mean(q_cfs, na.rm = TRUE), .by = date)
+
+joined <- rmrs_data%>%
+  filter(SiteLabel == "LBEA") %>%
+  left_join(cdwr_lbea, by = c("Date" = "date"))%>%
+  select(Date, cdwr_q_cfs = daily_q, rmrs_q_cfs = Q_cfs_clean)%>%
+  mutate(year = as_factor(year(Date)))
+
+cor <- cor(joined$rmrs_q_cfs, joined$cdwr_q_cfs, use = "complete.obs")
+R2 <- cor^2
+
+r2_label <- paste0("R^2 == ", round(R2, 2))
+
+ggplot(joined, aes(x = rmrs_q_cfs, y = cdwr_q_cfs, color = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  # Add the annotation
+  annotate(
+    "text", 
+    x = Inf, y = Inf,           # Place it in the top-right corner
+    label = r2_label, 
+    parse = TRUE,               # This tells ggplot to render R^2 correctly
+    hjust = 1.1, vjust = 1.5,   # Adjust position so it's not cut off by the border
+    size = 5,
+    color = "black"
+  ) +
+  labs(title = "Little Beaver",
+       x = "RMRS Q (cfs)",
+       y = "CDWR Q (SF Site) (cfs)") 
+
+
+```
+
+## Pennock
+
+The South Fork site also includes reservoir releases from Comanche and Hourglass so it might not be the best comparison site
+
+```{r}
+
+county_sf <- larimer_q%>%
+  filter(station_id == "11517")%>%
+  summarise(larimer_q_cfs = mean(value, na.rm = TRUE), .by = date)
+
+joined <- rmrs_data%>%
+  filter(SiteLabel == "PENN")%>%
+  left_join(county_sf, by = c("Date" = "date"))%>%
+  select(Date, larimer_q_cfs, rmrs_q_cfs = Q_cfs_clean)%>%
+  mutate(year = as_factor(year(Date)))%>%
+  na.omit()
+
+cor <- cor(joined$rmrs_q_cfs, joined$larimer_q_cfs, use = "complete.obs")
+R2 <- cor^2
+
+r2_label <- paste0("R^2 == ", round(R2, 2))
+
+ggplot(joined, aes(x = rmrs_q_cfs, y = larimer_q_cfs, color = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  # Add the annotation
+  annotate(
+    "text", 
+    x = Inf, y = Inf,        
+    label = r2_label, 
+    parse = TRUE,             
+    hjust = 1.5, vjust = 1.5,   
+    size = 5,
+    color = "black"
+  ) +
+  labs(title = "Pennock",
+       x = "RMRS Q (cfs)",
+       y = "Larimer Co Q (SF Site) (cfs)") 
+
+
+```
+
+## Beav
+
+```{r}
+
+county_sf <- larimer_q%>%
+  filter(station_id == "11517")%>%
+  summarise(larimer_q_cfs = mean(value, na.rm = TRUE), .by = date)
+
+joined <- rmrs_data%>%
+  filter(SiteLabel == "BEAV")%>%
+  left_join(county_sf, by = c("Date" = "date"))%>%
+  select(Date, larimer_q_cfs, rmrs_q_cfs = Q_cfs_clean)%>%
+  mutate(year = as_factor(year(Date)))%>%
+  na.omit()
+
+cor <- cor(joined$rmrs_q_cfs, joined$larimer_q_cfs, use = "complete.obs")
+R2 <- cor^2
+
+r2_label <- paste0("R^2 == ", round(R2, 2))
+
+ggplot(joined, aes(x = rmrs_q_cfs, y = larimer_q_cfs, color = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  # Add the annotation
+  annotate(
+    "text", 
+    x = Inf, y = Inf,        
+    label = r2_label, 
+    parse = TRUE,             
+    hjust = 1.5, vjust = 1.5,   
+    size = 5,
+    color = "black"
+  ) +
+  labs(title = "Beaver",
+       x = "RMRS Q (cfs)",
+       y = "Larimer Co Q (SF Site) (cfs)") 
+
+
+```
+
+## Fish
+
+Fish is a completely seperate tributary and the South Fork site also includes reservoir releases from Comanche and Hourglass so it might not be the best comparison site
+
+```{r}
+
+county_sf <- larimer_q%>%
+  filter(station_id == "11517")%>%
+  summarise(larimer_q_cfs = mean(value, na.rm = TRUE), .by = date)
+
+joined <- rmrs_data%>%
+  filter(SiteLabel == "FISH")%>%
+  left_join(county_sf, by = c("Date" = "date"))%>%
+  select(Date, larimer_q_cfs, rmrs_q_cfs = Q_cfs_clean)%>%
+  mutate(year = as_factor(year(Date)))%>%
+  na.omit()
+
+cor <- cor(joined$rmrs_q_cfs, joined$larimer_q_cfs, use = "complete.obs")
+R2 <- cor^2
+
+r2_label <- paste0("R^2 == ", round(R2, 2))
+
+ggplot(joined, aes(x = rmrs_q_cfs, y = larimer_q_cfs, color = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  # Add the annotation
+  annotate(
+    "text", 
+    x = Inf, y = Inf,        
+    label = r2_label, 
+    parse = TRUE,             
+    hjust = 1.5, vjust = 1.5,   
+    size = 5,
+    color = "black"
+  ) +
+  labs(title = "Fish",
+       x = "RMRS Q (cfs)",
+       y = "Larimer Co Q (SF Site) (cfs)") 
+
+
+```
+
+## Bennett
+
+The county gage is downstream of Jack's gulch so the relationship might be a bit skewed here. This site is also VERY flashy so we may want to compare with hourly data instead of daily averages to capture the flashy nature of this site, but for now we'll just look at daily averages
+
+```{r}
+
+county_sf <- larimer_q%>%
+  filter(station_id == "11518")%>%
+  summarise(larimer_q_cfs = mean(value, na.rm = TRUE), .by = date)
+
+joined <- rmrs_data%>%
+  filter(SiteLabel == "BENN")%>%
+  left_join(county_sf, by = c("Date" = "date"))%>%
+  select(Date, larimer_q_cfs, rmrs_q_cfs = Q_cfs_clean)%>%
+  mutate(year = as_factor(year(Date)))%>%
+  na.omit()
+
+cor <- cor(joined$rmrs_q_cfs, joined$larimer_q_cfs, use = "complete.obs")
+R2 <- cor^2
+
+r2_label <- paste0("R^2 == ", round(R2, 2))
+
+ggplot(joined, aes(x = rmrs_q_cfs, y = larimer_q_cfs, color = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  # Add the annotation
+  annotate(
+    "text", 
+    x = Inf, y = Inf,        
+    label = r2_label, 
+    parse = TRUE,             
+    hjust = 1.5, vjust = 1.5,   
+    size = 5,
+    color = "black"
+  ) +
+  labs(title = "Bennett",
+       x = "RMRS Q (cfs)",
+       y = "Larimer Co Q (Bennett Site) (cfs)") 
+
+```
+
+## Sevenmile
+
+Looks like the county gage was only installed in 2023 so we can only compare with 2023 & 2024
+
+```{r}
+
+county_sf <- larimer_q%>%
+  filter(station_id == "11519")%>%
+  summarise(larimer_q_cfs = mean(value, na.rm = TRUE), .by = date)
+
+joined <- rmrs_data%>%
+  filter(SiteLabel == "SEVN")%>%
+  left_join(county_sf, by = c("Date" = "date"))%>%
+  select(Date, larimer_q_cfs, rmrs_q_cfs = Q_cfs_clean)%>%
+  mutate(year = as_factor(year(Date)))%>%
+  na.omit()
+
+cor <- cor(joined$rmrs_q_cfs, joined$larimer_q_cfs, use = "complete.obs")
+R2 <- cor^2
+
+r2_label <- paste0("R^2 == ", round(R2, 2))
+
+ggplot(joined, aes(x = rmrs_q_cfs, y = larimer_q_cfs, color = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  # Add the annotation
+  annotate(
+    "text", 
+    x = Inf, y = Inf,        
+    label = r2_label, 
+    parse = TRUE,             
+    hjust = 1.5, vjust = 1.5,   
+    size = 5,
+    color = "black"
+  ) +
+  labs(title = "Sevenmile",
+       x = "RMRS Q (cfs)",
+       y = "Larimer Co Q (Sevenmile Site) (cfs)") 
+
+```
+
+# Comparison with Canyon mouth
+
+```{r, fig.dim = c(12,12)}
+cdwr_canyon <- cdwr_data%>%
+  filter(abbrev == "CLAFTCCO")%>%
+  summarise(daily_q = mean(q_cfs, na.rm = TRUE), .by = date)
+
+joined_canyon <- rmrs_data%>%
+  left_join(cdwr_canyon, by = c("Date" = "date"))%>%
+  select(Date,Site, cdwr_q_cfs = daily_q, rmrs_q_cfs = Q_cfs_clean)%>%
+  mutate(year = as_factor(year(Date)))
+
+site_wide_r2 <- map_dfr(unique(joined_canyon$Site), ~{
+  site_data <- joined_canyon %>% filter(Site == .x)
+  
+   cor <- cor(site_data$rmrs_q_cfs, site_data$cdwr_q_cfs, use = "complete.obs")
+   R2 <- cor^2
+   tibble(Site = .x, R2 = R2, r2_label = paste0("R²:", round(R2, 2)))
+})
+ggplot(joined_canyon, aes(x = rmrs_q_cfs, y = cdwr_q_cfs, color = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  # Add the annotation
+  geom_text(
+    data = site_wide_r2, # Only add text for temperature models
+    aes(x = -Inf, y = Inf, label = r2_label),
+    hjust = -1.1, vjust = 1.1, # Positions text in the top-left corner
+    size = 5,
+    inherit.aes = FALSE # Prevents text from looking for avg_temp_c/mean_cleaned in temp_mods
+  ) +
+  facet_wrap(~Site, scale = "free_x") +
+  labs(title = "Canyon Mouth Comparison",
+       x = "RMRS Q (cfs)",
+       y = "CDWR Q (Canyon Mouth Site) (cfs)")
+
+```
+
+## Comparison with NF big T
+
+```{r}
+
+# read in data from BTNFDRCO
+nf_bigt_data <- get_telemetry_ts(abbrev = "BTNFDRCO",parameter = "DISCHRG", 
+                                start_date = "2021-01-01", end_date = "2025-12-01", 
+                                timescale = "hour", 
+                                api_key = cdwr_key)%>%
+  select(abbrev,datetime, q_cfs = meas_value, flag = flag_b)%>%
+  mutate(DT_round = floor_date(with_tz(datetime, "MST"), unit = "hour"), 
+         date = as_date(DT_round),
+         q_cfs = if_else(!is.na(flag), NA_real_, q_cfs))
+
+cdwr_canyon <- nf_bigt_data%>%
+  summarise(daily_q = mean(q_cfs, na.rm = TRUE),
+            log_daily_q = log(mean(q_cfs, na.rm = T)),
+            
+            .by = date)
+
+joined <- rmrs_data%>%
+  left_join(cdwr_canyon, by = c("Date" = "date"))%>%
+  mutate(log_rmrs_q_cfs = log(Q_cfs_clean))%>%
+  select(Date,Site, cdwr_q_cfs = daily_q, log_cdwr_q_cfs = log_daily_q, log_rmrs_q_cfs, rmrs_q_cfs = Q_cfs_clean)%>%
+  mutate(year = as_factor(year(Date)))
+
+site_wide_r2 <- map_dfr(unique(joined$Site), ~{
+  site_data <- joined %>% filter(Site == .x)
+  
+   cor <- cor(site_data$rmrs_q_cfs, site_data$cdwr_q_cfs, use = "complete.obs")
+   R2 <- cor^2
+   log_R2 <- cor(site_data$rmrs_q_cfs, site_data$log_cdwr_q_cfs, use = "complete.obs")^2
+   log_log_R2 <- cor(site_data$log_rmrs_q_cfs, site_data$log_cdwr_q_cfs, use = "complete.obs")^2
+   
+   tibble(Site = .x, R2 = R2,logR2 = log_R2, log_log_R2 )
+})
+ggplot(joined, aes(x = rmrs_q_cfs, y = cdwr_q_cfs, color = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  # Add the annotation
+  geom_text(
+    data = site_wide_r2, # Only add text for temperature models
+    aes(x = -Inf, y = Inf, label = paste0("R²:", round(R2, 2), "|", round(logR2, 2),"|", round(log_log_R2, 2) ) ),
+    hjust = -1.1, vjust = 1.1, # Positions text in the top-left corner
+    size = 5,
+    inherit.aes = FALSE 
+  ) +
+  facet_wrap(~Site, scale = "free_x") +
+  scale_y_log10()+
+  scale_x_log10()+
+  labs(title = "Canyon Mouth Comparison",
+       x = "RMRS Q (cfs)",
+       y = "CDWR Q (NF Big Thompson Site) (cfs)")
+
+
+
+```
+## Comparison with Big Thompson above Lake Estes
+
+```{r}
+
+# read in data from BTNFDRCO
+bigt_data <- get_telemetry_ts(abbrev = "BTABESCO",parameter = "DISCHRG", 
+                                start_date = "2021-01-01", end_date = "2025-12-01", 
+                                timescale = "hour", 
+                                api_key = cdwr_key)%>%
+  select(abbrev,datetime, q_cfs = meas_value, flag = flag_b)%>%
+  mutate(DT_round = floor_date(with_tz(datetime, "MST"), unit = "hour"), 
+         date = as_date(DT_round),
+         q_cfs = if_else(!is.na(flag), NA_real_, q_cfs))%>%
+  summarise(daily_q = mean(q_cfs, na.rm = TRUE),
+            log_daily_q = log(mean(q_cfs, na.rm = T)),
+            
+            .by = date)
+
+joined <- rmrs_data%>%
+  left_join(bigt_data, by = c("Date" = "date"))%>%
+  mutate(log_rmrs_q_cfs = log(Q_cfs_clean))%>%
+  select(Date,Site, cdwr_q_cfs = daily_q, log_cdwr_q_cfs = log_daily_q, log_rmrs_q_cfs, rmrs_q_cfs = Q_cfs_clean)%>%
+  mutate(year = as_factor(year(Date)))
+
+site_wide_r2 <- map_dfr(unique(joined$Site), ~{
+  site_data <- joined %>% filter(Site == .x)
+  
+   cor <- cor(site_data$rmrs_q_cfs, site_data$cdwr_q_cfs, use = "complete.obs")
+   R2 <- cor^2
+   log_R2 <- cor(site_data$rmrs_q_cfs, site_data$log_cdwr_q_cfs, use = "complete.obs")^2
+   log_log_R2 <- cor(site_data$log_rmrs_q_cfs, site_data$log_cdwr_q_cfs, use = "complete.obs")^2
+   
+   tibble(Site = .x, R2 = R2,logR2 = log_R2, log_log_R2 )
+})
+
+
+final <- joined%>%
+  left_join(site_wide_r2, by = "Site")%>%
+  mutate(site_label_perf = paste0(Site, " R²:", round(R2, 2), "|", round(logR2, 2),"|", round(log_log_R2, 2) ) )
+
+ggplot(final, aes(x = rmrs_q_cfs, y = cdwr_q_cfs, color = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  facet_wrap(~site_label_perf, scale = "free_x") +
+  scale_y_log10()+
+  scale_x_log10()+
+  labs(title = "Canyon Mouth Comparison",
+       x = "RMRS Q (cfs)",
+       y = "CDWR Q (NF Big Thompson Site) (cfs)")
+
+
+
+```
+
+## Comparison of Northern CLP Tribs with Laramie River
+
+We can essentially recreate a full timeseries of the laramie river by taking this gage (LARRIVCO) and adding back in the water removed by the tunnel (LAPTUNCO). To save on some effort, we will add in the tunnel data at a hourly timestep, if this seems to work well we may need to figure out the actual travel time between the tunnnel and site to correct for exact timing.  
+
+```{r}
+tunnel <- get_telemetry_ts(abbrev = "LAPTUNCO",parameter = "DISCHRG", 
+                                start_date = "2021-01-01", end_date = "2025-12-01", 
+                                timescale = "hour", 
+                                api_key = cdwr_key)%>%
+  select(abbrev,datetime, q_cfs = meas_value, flag = flag_b)%>%
+  mutate(DT_round = floor_date(with_tz(datetime, "MST"), unit = "hour"), 
+         date = as_date(DT_round),
+         q_cfs_tunnel = if_else(!is.na(flag), NA_real_, q_cfs))%>%
+  select(DT_round, q_cfs_tunnel)
+
+laramie_river <- get_telemetry_ts(abbrev = "LARRIVCO",parameter = "DISCHRG", 
+                                start_date = "2021-01-01", end_date = "2025-12-01", 
+                                timescale = "hour", 
+                                api_key = cdwr_key)%>%
+  select(abbrev,datetime, q_cfs = meas_value, flag = flag_b)%>%
+  mutate(DT_round = floor_date(with_tz(datetime, "MST"), unit = "hour"), 
+         date = as_date(DT_round),
+         q_cfs = if_else(!is.na(flag), NA_real_, q_cfs))
+
+laramie_river_corr <- laramie_river%>%
+  left_join(tunnel, by = "DT_round")%>%
+  mutate(reconstructed_q = q_cfs + q_cfs_tunnel)
+
+ggplot(laramie_river_corr, aes(x = DT_round)) +
+  geom_line(aes(y = q_cfs), color = "blue", size = 1, alpha = 0.7) +
+  geom_line(aes(y = q_cfs_tunnel), color = "green", size = 1, alpha = 0.7) +
+  geom_line(aes(y = reconstructed_q), color = "red", size = 1, alpha = 0.7) +
+  labs(title = "Laramie River Flow Comparison",
+       x = "Date",
+       y = "Flow (cfs)",
+       color = "Legend") +
+  scale_color_manual(values = c("blue" = "Original Laramie River", "red" = "Reconstructed Laramie River")) +
+  theme(legend.position = "bottom")
+```
+
+## Northern Tribs with Q
+NJOE, PONO, DEAD, SOLP
+
+```{r}
+### Comparisons
+cdwr <- laramie_river_corr%>%
+  summarise(daily_q = mean(reconstructed_q, na.rm = TRUE),
+            log_daily_q = log(mean(reconstructed_q, na.rm = T)),
+            
+            .by = date)
+
+joined <- rmrs_data%>%
+  filter(Site %in% c("Deadman",  "North Joe Wright Creek", "South Lone Pine", "Fall", "Poudre North Fork", "Sawmill"))%>%
+  left_join(cdwr, by = c("Date" = "date"))%>%
+  mutate(log_rmrs_q_cfs = log(Q_cfs_clean))%>%
+  select(Date,Site, cdwr_q_cfs = daily_q, log_cdwr_q_cfs = log_daily_q, log_rmrs_q_cfs, rmrs_q_cfs = Q_cfs_clean)%>%
+  mutate(year = as_factor(year(Date)))
+
+site_wide_r2 <- map_dfr(unique(joined$Site), ~{
+  site_data <- joined %>% filter(Site == .x)
+  
+   cor <- cor(site_data$rmrs_q_cfs, site_data$cdwr_q_cfs, use = "complete.obs")
+   R2 <- cor^2
+   log_R2 <- cor(site_data$rmrs_q_cfs, site_data$log_cdwr_q_cfs, use = "complete.obs")^2
+   log_log_R2 <- cor(site_data$log_rmrs_q_cfs, site_data$log_cdwr_q_cfs, use = "complete.obs")^2
+   
+   tibble(Site = .x, R2 = R2,logR2 = log_R2, log_log_R2 )
+})
+
+final <- joined%>%
+  left_join(site_wide_r2, by = "Site")%>%
+  mutate(site_label_perf = paste0(Site, " R²:", round(R2, 2), "|", round(logR2, 2),"|", round(log_log_R2, 2) ) )
+
+ggplot(final, aes(x = rmrs_q_cfs, y = cdwr_q_cfs, color = year)) +
+  geom_point() +
+  #geom_smooth(method = "lm", se = F) +
+  # # Add the annotation
+  # geom_text(
+  #   data = site_wide_r2, # Only add text for temperature models
+  #   aes(x = -Inf, y = Inf, label = paste0("R²:", round(R2, 2), "|", round(logR2, 2),"|", round(log_log_R2, 2) ) ),
+  #   hjust = -1.1, vjust = 1.1, # Positions text in the top-left corner
+  #   size = 5,
+  #   inherit.aes = FALSE 
+  # ) +
+  facet_wrap(~site_label_perf, scale = "free_x") +
+  scale_y_log10()+
+  scale_x_log10()+
+  labs(title = "Laramie River Comparison",
+       x = "RMRS Q (cfs)",
+       y = "CDWR Q (Laramie River Site) (cfs)", 
+       color = "Year")
+
+
+
+```
+
+
+
+
+# Takeaways:
+
+-   We don't have great comparison gages since few of the tributaries are gaged
+-   Aside from Beaver (only one year of data), most R\^2 values are low (\<0.5) but all sites do have positive relationships between the RMRS Q and the comparison gages.
+-   In general, we have better relationships with Canyon Mouth Q aside from a few sites
+    -   Upper Sheep, Fall and Fish have worse relationships
+-   We may want to look into comparing with hourly data instead of daily averages to capture the flashy nature of these sites, especially Bennett and Sevenmile
