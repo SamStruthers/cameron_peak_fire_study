@@ -17,3 +17,5 @@ sharing_data/
 test_output/
 index.qmd
 src/hydrovu_api_pull/credentials.yml
+creds
+docs

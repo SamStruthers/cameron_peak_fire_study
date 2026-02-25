@@ -13,18 +13,16 @@ package_load <- function(package_names){
 #vector of packages
 pack_req <- c( 
   # data wrangling packages
-  "tidyverse","lubridate","padr","janitor","padr", "broom","arrow","zoo","tibble", "readxl",
+  "tidyverse","lubridate","padr","janitor","padr", "broom","arrow","zoo","readxl",
   #spatial packages
-  "sf","terra","nhdplusTools", "tigris","raster", "leaflet","tmap","tidyterra", "raster", "mapview","elevatr",
+  "sf","terra","nhdplusTools", "tigris","raster", "leaflet","tmap","elevatr",
   # plotting
-  "ggpubr","ggthemes","scales","corrplot","gghighlight", "geomtextpath", "ggbeeswarm","plotly", "ggpmisc","flextable","officer",
+  "ggpubr","ggthemes","scales","corrplot","gghighlight","patchwork", "geomtextpath", "ggbeeswarm","plotly", "ggpmisc","officer", "flextable","kableExtra",
   # web scrapping
-  "rjson", "rvest", "dataRetrieval", "httr", "jsonlite",
+  "rjson", "rvest", "dataRetrieval", "httr", "jsonlite", "RSelenium",
   #extra
-  "devtools", "trend", "kableExtra")
+  "devtools", "trend")
 package_load(pack_req)
-
-
 
 
 
@@ -81,9 +79,6 @@ sensor_meta <- tibble(
 # 
 # #^^ but only reservoirs
  mainstem_Res_only <-c("CBRR", "JOER", "PTRR",  "BRNR", "LNGR")
- # All reservoirs
- all_res_only <-c("CBRR", "JOER", "PTRR",  "BRNR", "LNGR", "COMR", "HORR")
- 
 # 
 # #southfork reservoirs
 # SF_Res <- c("COMI", "COMR", "COMO", "HORI","HORR" , "HORO", "BEAV", "SFM")
@@ -120,7 +115,7 @@ sensor_meta <- tibble(
 
 ### ----- Color Sets ----- ###
 
-#cbbPalette <- c( "#999999","#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+cbbPalette <- c( "#999999","#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 
 #Color for watersheds, matches burn severity
 #colorsBS <- c("Barnes Meadow Reservoir" = "#D55E00", "Peterson Reservoir" ="#E69F00", "Chambers Reservoir" = "#F0E442", "Joe Wright Reservoir" = "#56B4E9", "Long Draw Reservoir" = "#0072B2")
@@ -128,18 +123,8 @@ sensor_meta <- tibble(
 #Color for reservoirs, matches burn severity by site code
 
 #colorsBS_site_code <- c("BRNR" = "#D55E00", "CBRR" = "#F0E442", "JOER" = "#56B4E9", "LNGR" = "#0072B2", "PTRR" ="#E69F00", "COMR" = "cyan", "HORR" = "#CC79A7")
-colorsBS_site_code <- c("BRNR" = "#F94144", "PTRR" ="#F3722C", "COMR" = "#F8961E", "CBRR" = "#F9C74F", "HORR" = "#90BE6D", "JOER" = "#56B4E9", "LNGR" = "#0072B2")
+colorsBS_site_code <- c("BRNR" = "#d71a1d", "PTRR" ="#F3722C", "COMR" = "#F8961E", "CBRR" = "#F9C74F", "HORR" = "#90BE6D", "JOER" = "#56B4E9", "LNGR" = "#0072B2")
 
-
-#in alphabetical order
-colorsBS_site_code_alpha <- c(
-  BRNR = "#F94144",
-  CBRR = "#F9C74F",
-  COMR = "#F8961E",
-  HORR = "#90BE6D",
-  JOER = "#56B4E9",
-  LNGR = "#0072B2",
-  PTRR = "#F3722C")
 #Color matches burn severity
 #colorsBS_in_order <-c("#0072B2","#56B4E9","#F0E442","#E69F00","#D55E00")
 
