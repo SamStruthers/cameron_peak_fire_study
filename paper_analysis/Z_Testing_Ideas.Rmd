@@ -12,7 +12,7 @@ source("paper_analysis/00_analysis_setup.R")
 #basic function to save a plot in standard size, dpi and width into figures folder
 save_plot_image<- function(plot,name){
   
-  ggsave(paste0("data/figs_output/2024_figs/",name,".jpg"), dpi = 300, width = 18, height = 10)
+  ggsave(paste0("data/figs_output/2025_figs/",name,".jpg"), dpi = 300, width = 18, height = 10)
   
 }
 
@@ -24,8 +24,10 @@ save_plot_image<- function(plot,name){
 
 #discrete sample data and location metadata from most recent pub
 
-DOI = "11110885"
-data_version = "v2024.04.16b"
+
+
+DOI = "14397591"
+data_version = "v.2024.12.11"
 
 
 source("paper_analysis/functions/grab_zenodo_data.R")
@@ -47,7 +49,7 @@ source("paper_analysis/functions/grab_zenodo_data.R")
 
 
 #site order now added to tidy chem and thus not needed
-rm(order_table, most_recent_chem, DOI, data_version)
+rm(order_table, DOI, data_version)
 print("Data Successfully loaded for analysis")
 ```
 
@@ -62,6 +64,188 @@ print("Data Successfully loaded for analysis")
 - DOC in lakes 
   does high DOC in reservoirs result in lower chla?
   - look at chla vs DOC in lakes
+  - Selecting samples for genomics
+  
+# Figs for presentation
+
+## Barnes chla timeline
+
+```{r}
+
+monthly_res_chla <- tidy_chem %>%
+  filter(Year %in% c(2021, 2022, 2023) & !is.na(ChlA) & site_code %in% mainstem_Res_only) %>%
+  select(site_code, Date, NO3, DTN, ChlA, Year) %>%
+  mutate(
+    month = factor(month(Date, label = TRUE, abbr = TRUE), 
+                   levels = c( "May", "Jun", "Jul", "Aug", "Sep", "Oct")), # Ensure correct month order
+    month_year = factor(paste(month, Year), 
+                        levels = unique(paste(month(Date, label = TRUE, abbr = TRUE), Year))) # Preserve order
+  ) %>%
+  group_by(site_code, Year, month, month_year) %>%
+  summarise(
+    monthly_mean_chla = mean(ChlA, na.rm = TRUE),
+    monthly_mean_NO3 = mean(NO3, na.rm = TRUE),
+    monthly_mean_DTN = mean(DTN, na.rm = TRUE)
+  )%>%
+  mutate(Year = as.character(Year))%>%
+  filter(!is.na(month))%>%
+  mutate(site_name = case_when(
+    site_code == "LNGR" ~ "Long Draw",
+    site_code == "JOER" ~ "Joe Wright",
+    site_code == "CBRR" ~ "Chambers",
+    site_code == "PTRR" ~ "Peterson",
+    site_code == "BRNR" ~ "Barnes Meadow"))%>%
+  filter(site_name == "Barnes Meadow")
+
+monthly_res_chla$Year <- factor(monthly_res_chla$Year, levels = c("2021", "2022", "2023"))
+# monthly_res_chla$site_code <- factor(monthly_res_chla$site_code, levels = c("LNGR", "JOER", "CBRR", "PTRR", "BRNR"))
+monthly_res_chla$site_name <- factor(monthly_res_chla$site_name, levels = c("Long Draw", "Joe Wright", "Chambers", "Peterson", "Barnes Meadow"))
+
+barnes_monthly_chla <-   
+  ggplot(data = monthly_res_chla, aes(x=month, y=monthly_mean_chla, color=Year, group=Year)) +
+  geom_line( linewidth=1.5) +
+  geom_point( size=5) +
+  scale_color_manual(values = c("2021" = "#009E73",
+                                "2022" = "#56B4E9",
+                                "2023" = "#D55E00")
+                       )+
+  geom_abline(aes(slope=0, intercept=2.6), color='black', linetype="dashed") +
+  geom_abline(aes(slope=0, intercept = 8), color='black', linetype="dashed") +
+  labs(x = "Date", y = " Chlorophyll a (μg/L)") +
+  theme_few(base_size=28) +
+  #coord_cartesian(ylim=c(0,10))+
+  #scale_x_date(date_breaks = "months", date_labels = "%b")+
+  facet_wrap(~site_name, 
+             #scales = "free_y",
+             nrow = 1)
+# 
+# "#002EA3", "#E70870", "#256BF5", 
+#                  "#745CFB", "#1E4D2B",
+  
+  
+save_plot_image(barnes_monthly_chla, "barnes_monthly_chla")
+
+```
+
+  
+  
+  
+  
+  ## Genomic
+
+```{r}
+
+# filter tidy chem for the dates that genomics were collected
+dates <- ymd(c("2022-06-22", "2022-08-25", "2022-09-19" ))
+
+genomes <- tidy_chem%>%
+  filter(Date %in% dates)%>%
+  #none of these samples have tn, tc and no detectable PO4
+  select(site_code, Date, DT_mst, Turbidity:SO4, -TN, -TC,-PO4, watershed)
+
+write_csv(genomes, "data/genomes.csv")
+
+genomes_long <- genomes%>%
+  pivot_longer(cols = Turbidity:SO4, names_to = "parameter", values_to = "value")
+
+# make a plot of date and each parameter, color by site
+ggplot(data = genomes_long%>%filter(parameter %in% c("Turbidity", "ChlA", "NO3", "DOC", "K")), aes(x = Date, y = value , color = site_code, shape = watershed))+
+  geom_point()+
+  facet_wrap(~parameter, scales = "free_y")+
+  theme_bw()
+
+```
+  
+# TOC dist
+
+```{r}
+#make distribution of TOC, facet at each site
+
+
+toc_chem <- tidy_chem %>%
+  filter(!is.na(TOC)& !is.na(WQ_sensor)) %>%
+  filter(Date >= "2023-09-01")%>%
+  filter(site_code %nin% c("timberline", "prospect", "boxelder", "riverbluffs", "PNF"))
+
+sample_counts <- toc_chem%>%
+  count(Site, name = "n")
+
+unique(toc_chem$Site)
+
+toc_chem$Site <- factor(toc_chem$Site, levels = c( "Joe Wright Inlet","Chambers Inlet", "Chambers Outflow","Poudre below Poudre Falls",   "Poudre Below Rustic", "Little Beaver", "Pennock (Signal Mountain)","Poudre South Fork","Poudre at Manner's Bridge","Poudre at Bellvue Diversion","Poudre at Lincoln" , "Poudre at Archery Range","Boxelder Creek above Sanitation District","Spring Creek at Poudre Trail"))
+
+# Plot with sample count as label
+toc_plot <- ggplot(data = toc_chem, aes(x = TOC, fill = Site)) +
+  geom_histogram(bins = 20) +
+  #facet_wrap(~Site)+#, scales = "free_y") +
+  # geom_text(data = sample_counts,
+  #           aes(x = -Inf, y = Inf, label = paste0("n = ", n)),
+  #           hjust = -3, vjust = 2, inherit.aes = FALSE) +
+  theme_bw() +
+  scale_fill_viridis_d(option = "turbo")+
+  labs(x = "TOC (mg/L)", y = "Count", fill = "Site")
+save_plot_image(toc_plot, "toc_dist_all")
+```
+
+```{r}
+# Filter and prepare counts
+
+chla_chem <- tidy_chem %>%
+  filter(!is.na(ChlA)& !is.na(WQ_sensor)) %>%
+  filter(ChlA < 10)%>%
+  filter(Date >= "2023-09-01")%>%
+  filter(site_code %nin% c("timberline", "prospect", "boxelder", "riverbluffs", "PNF"))
+
+sample_counts <- chla_chem%>%
+  count(Site, name = "n")
+
+unique(chla_chem$Site)
+
+chla_chem$Site <- factor(chla_chem$Site, levels = c( "Joe Wright Inlet","Chambers Inlet", "Chambers Outflow","Poudre below Poudre Falls",   "Poudre Below Rustic", "Little Beaver", "Pennock (Signal Mountain)","Poudre South Fork","Poudre at Manner's Bridge","Poudre at Bellvue Diversion","Poudre at Lincoln" , "Poudre at Archery Range","Boxelder Creek above Sanitation District","Spring Creek at Poudre Trail"))
+
+# Plot with sample count as label
+chla_dist <- ggplot(data = chla_chem, aes(x = ChlA, fill = Site)) +
+  geom_histogram(bins = 20) +
+  #facet_wrap(~Site)+#, scales = "free_y") +
+  # geom_text(data = sample_counts,
+  #           aes(x = -Inf, y = Inf, label = paste0("n = ", n)),
+  #           hjust = -3, vjust = 2, inherit.aes = FALSE) +
+  theme_bw() +
+  scale_fill_viridis_d(option = "turbo")+
+  labs(x = "Chl-a (ug/L)", y = "Count", fill = "Site")
+
+
+save_plot_image(chla_dist, "chla_dist_all")
+```
+  
+#chla and TOC by season
+
+```{r}
+
+sensor_chem <- tidy_chem %>%
+  filter(!is.na(WQ_sensor)) %>%
+  filter(Date >= "2023-09-01")%>%
+  filter(ChlA <10)%>%
+  filter(site_code %nin% c("timberline", "prospect", "boxelder", "riverbluffs", "PNF"))%>%
+  mutate(m_d = format(Date, "%m-%d"), 
+         plot_date = as.Date(paste0("2023-", m_d), format = "%Y-%m-%d"))%>%
+  select(Site, plot_date, TOC, ChlA, TN)%>%
+  pivot_longer(values_to = "value", names_to = "parameter", cols = c(TOC, ChlA, TN))
+
+sensor_chem$Site <- factor(sensor_chem$Site, levels = c( "Joe Wright Inlet","Chambers Inlet", "Chambers Outflow","Poudre below Poudre Falls",   "Poudre Below Rustic", "Little Beaver", "Pennock (Signal Mountain)","Poudre South Fork","Poudre at Manner's Bridge","Poudre at Bellvue Diversion","Poudre at Lincoln" , "Poudre at Archery Range","Boxelder Creek above Sanitation District","Spring Creek at Poudre Trail"))
+
+ggplot(data = sensor_chem, aes(x = plot_date, y = value, color = Site))+
+  geom_point()+
+  theme_bw() +
+  facet_wrap(~parameter, scales = "free_y")+
+  scale_color_viridis_d(option = "turbo")+
+  #geom_smooth(method = "lm")+
+  theme_bw()+
+  labs(x = "Date", y = "Value", color = "Site")
+
+```
+  
+  
   
 ## Chla vs DOC and NO3:
   No huge pattern
@@ -102,7 +286,7 @@ for(i in unique(no3_rolling$site_code)){
 }
 }
  
-ggplot(data = all_no3, aes(x = slope1_no3, y = slope1_chla, color = site_code))+
+ ggplot(data = all_no3, aes(x = slope1_no3, y = slope1_chla, color = site_code))+
   geom_point()+
   #add 1:1 line
   geom_abline(intercept = 0, slope = 0, linetype = "solid", color = "red")+
@@ -111,7 +295,6 @@ ggplot(data = all_no3, aes(x = slope1_no3, y = slope1_chla, color = site_code))+
   scale_color_manual(values = colorsBS_site_code)+
   facet_wrap(~site_code)+
   theme_bw()
-
 
 
 ```
@@ -294,3 +477,59 @@ ggplot(chem_q_join, aes(x = prop_chd_pbd)) +
 ```
 
 
+ 
+ ## Make a bar plot of SC and then break up that bar by the proportion of total for each ion for each sampling date
+ 
+```{r}
+#make a bar plot of SC and then break up that bar by the proportion of total for each ion
+
+
+data<- tidy_chem%>%
+  filter(site_code %nin% c("PNF", "PMAN", "PBR", "boxelder", "prospect", "timberline", "riverbluffs"))%>%
+  select(site_code, Date, SC, DOC, Na:SO4)%>%
+  mutate(ion_sum = rowSums(across(c(DOC:SO4)), na.rm = TRUE), 
+         base= rowSums(across(c(Ca, Cl,Na, Mg)), na.rm = TRUE))%>%
+  mutate(across(c(base, DOC, F,K, NO3, NH4, PO4, SO4), ~ . / ion_sum * 100, .names = "prop_{.col}")) %>%
+  select(site_code, Date, SC,  starts_with("prop_"))
+
+# Prepare the data in long format
+data_long <- data %>%
+  pivot_longer(cols = c(prop_DOC:prop_SO4, prop_base),
+               names_to = "Ion", values_to = "Proportion") %>%
+  mutate(Ion = str_remove(Ion, "prop_"))  # Clean up ion names
+
+
+
+
+# Plot
+ggplot(data_long%>%filter(year(Date) == 2022), aes(x = Date, y = Proportion, fill = Ion)) +
+  geom_col(position = "stack", width = 3) +  # Stack the bars
+  #geom_line(data = data, aes(x = Date, y = SC), color = "black", size = 1, inherit.aes = FALSE) + # SC line
+  labs(x = "Date", 
+       y = "Proportion of Total Ions (%)", 
+       fill = "Ion") +
+  theme_bw()+
+  facet_wrap(~site_code)+
+  ylim(0,100)# Separate by site code
+
+
+
+# make a column graph of SC for each date
+ggplot(data, aes(x = Date, y = SC))+
+  geom_col()+
+  geom_col(aes(y = prop_Na, fill = "Na"))+
+  geom_col(aes(y = prop_Cl, fill = "Cl"))+
+  geom_col(aes(y = prop_SO4, fill = "SO4"))+
+  geom_col(aes(y = prop_DOC, fill = "DOC"))+
+  geom_col(aes(y = prop_NH4, fill = "NH4"))+
+  geom_col(aes(y = prop_Ca, fill = "Ca"))+
+  geom_col(aes(y = prop_F, fill = "F"))+
+  geom_col(aes(y = prop_Mg, fill = "Mg"))+
+  geom_col(aes(y = prop_K, fill = "K"))+
+  geom_col(aes(y = prop_NO3, fill = "NO3"))+
+  geom_col(aes(y = prop_PO4, fill = "PO4"))+
+  labs(x = "Date", y = "SC (uS/cm)", fill = "Ion")+
+  theme_bw()
+```
+ 
+ 

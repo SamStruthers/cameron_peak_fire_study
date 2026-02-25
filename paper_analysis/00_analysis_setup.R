@@ -13,13 +13,13 @@ package_load <- function(package_names){
 #vector of packages
 pack_req <- c( 
   # data wrangling packages
-  "tidyverse","lubridate","padr","janitor","padr", "broom","arrow","zoo",
+  "tidyverse","lubridate","padr","janitor","padr", "broom","arrow","zoo","readxl",
   #spatial packages
-  "sf","terra","nhdplusTools", "tigris","raster", "leaflet","tmap",
+  "sf","terra","nhdplusTools", "tigris","raster", "leaflet","tmap","elevatr",
   # plotting
-  "ggpubr","ggthemes","scales","corrplot","gghighlight", "geomtextpath", "ggbeeswarm","plotly", "ggpmisc","flextable",
+  "ggpubr","ggthemes","scales","corrplot","gghighlight","patchwork", "geomtextpath", "ggbeeswarm","plotly", "ggpmisc","officer", "flextable","kableExtra",
   # web scrapping
-  "rjson", "rvest", "dataRetrieval", "httr", "jsonlite",
+  "rjson", "rvest", "dataRetrieval", "httr", "jsonlite", "RSelenium",
   #extra
   "devtools", "trend")
 package_load(pack_req)
@@ -115,7 +115,7 @@ sensor_meta <- tibble(
 
 ### ----- Color Sets ----- ###
 
-#cbbPalette <- c( "#999999","#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+cbbPalette <- c( "#999999","#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 
 #Color for watersheds, matches burn severity
 #colorsBS <- c("Barnes Meadow Reservoir" = "#D55E00", "Peterson Reservoir" ="#E69F00", "Chambers Reservoir" = "#F0E442", "Joe Wright Reservoir" = "#56B4E9", "Long Draw Reservoir" = "#0072B2")
@@ -123,7 +123,7 @@ sensor_meta <- tibble(
 #Color for reservoirs, matches burn severity by site code
 
 #colorsBS_site_code <- c("BRNR" = "#D55E00", "CBRR" = "#F0E442", "JOER" = "#56B4E9", "LNGR" = "#0072B2", "PTRR" ="#E69F00", "COMR" = "cyan", "HORR" = "#CC79A7")
-colorsBS_site_code <- c("BRNR" = "#F94144", "PTRR" ="#F3722C", "COMR" = "#F8961E", "CBRR" = "#F9C74F", "HORR" = "#90BE6D", "JOER" = "#56B4E9", "LNGR" = "#0072B2")
+colorsBS_site_code <- c("BRNR" = "#d71a1d", "PTRR" ="#F3722C", "COMR" = "#F8961E", "CBRR" = "#F9C74F", "HORR" = "#90BE6D", "JOER" = "#56B4E9", "LNGR" = "#0072B2")
 
 #Color matches burn severity
 #colorsBS_in_order <-c("#0072B2","#56B4E9","#F0E442","#E69F00","#D55E00")
