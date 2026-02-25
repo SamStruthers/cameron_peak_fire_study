@@ -6,15 +6,43 @@
   sf::sf_use_s2(FALSE)
   
   # Download some NHDPlusHR Data specific to Poudre Region
-  hr_data <- nhdplusTools::download_nhdplushr( "data/nhd_flowlines/", 1019)
+  hr_data <- nhdplusTools::download_nhdplushr( "data/nhd_flowlines/", 1401 )
   hr_flowlines <- nhdplusTools::get_nhdplushr(hr_data, layers = c("NHDFlowline"))
   hr_catchments <- nhdplusTools::get_nhdplushr(hr_data, layers = c("NHDPlusCatchment"))
+  # what is the CRS of hr catchements
+ hr_catchments <- hr_catchments[[1]]%>%
+   st_transform(26913)
+  
+  # Define the HUC 8 code for the Upper Colorado River
+  upper_colorado_huc8 <- "14010001"
+  
+  # Get the HUC 8 boundary
+  upper_colorado_boundary <- get_huc(id = upper_colorado_huc8, type = "huc08")%>%
+    st_transform(26913)%>%
+    st_as_sf()
+  mapview::mapview(upper_colorado_boundary)
+  # Display the boundary
+  print(upper_colorado_boundary)
+  
+  
+#clip the hr catchments with the upper colorado boundary
+  hr_catchments_clip <- hr_catchments %>%
+    st_intersection(upper_colorado_boundary)%>%
+    st_transform(4326)%>% select(FEATUREID)
+  
+  trim_catchments <- hr_catchments_clip %>%
+    st_transform(4326)%>% select(FEATUREID)
+
+  #plot the catchments
+  mapview::mapview(trim_catchments)
+ 
 
   #Sites file
   site_file <- "data/ross_clp_chem/data/metadata/location_metadata.csv"
   
   # Read in sites
-  sites <- read_csv(site_file)
+  sites <- read_csv(site_file)%>% 
+    st_as_sf(coords = c("Long", "Lat"), crs = 4326)
   
   # 
   # for(i in 1:nrow(sites)){
@@ -25,12 +53,14 @@
   #     write_name = sites$site_code[i]
   #   )
   # }
+ 
+
   
   
   # Get the index of the flowline that is closest to the site
   start_index <- get_flowline_index(hr_flowlines$NHDFlowline,
                                     sites,
-                                    search_radius = 10)
+                                    search_radius = NULL)
   #generate watersheds based on the COMID using NHD_plus data downloaded
   watersheds <-  map(start_index$COMID, function(x){
     
@@ -72,12 +102,12 @@
   }
 #check sites  
   
-  test_catchment("CBRI")
+  test_catchment("LNGR")
 
   # #site to download Soil Burn Severity for the Cameron Peak fire BAER report
   # https://mtbs.gov/direct-download
 
-  
+
   sbs <- raster::raster("data/spatial/BAER_sbs_raster/cpf_sbs_BAER.tif") 
  # remove water bodies 
   sbs[sbs == 6] <- NA
