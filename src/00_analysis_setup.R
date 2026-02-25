@@ -13,16 +13,18 @@ package_load <- function(package_names){
 #vector of packages
 pack_req <- c( 
   # data wrangling packages
-  "tidyverse","lubridate","padr","janitor","padr", "broom","arrow","zoo",
+  "tidyverse","lubridate","padr","janitor","padr", "broom","arrow","zoo","tibble", "readxl",
   #spatial packages
-  "sf","terra","nhdplusTools", "tigris","raster", "leaflet","tmap",
+  "sf","terra","nhdplusTools", "tigris","raster", "leaflet","tmap","tidyterra", "raster", "mapview","elevatr",
   # plotting
-  "ggpubr","ggthemes","scales","corrplot","gghighlight", "geomtextpath", "ggbeeswarm","plotly", "ggpmisc","flextable",
+  "ggpubr","ggthemes","scales","corrplot","gghighlight", "geomtextpath", "ggbeeswarm","plotly", "ggpmisc","flextable","officer",
   # web scrapping
   "rjson", "rvest", "dataRetrieval", "httr", "jsonlite",
   #extra
-  "devtools", "trend")
+  "devtools", "trend", "kableExtra")
 package_load(pack_req)
+
+
 
 
 
@@ -79,6 +81,9 @@ sensor_meta <- tibble(
 # 
 # #^^ but only reservoirs
  mainstem_Res_only <-c("CBRR", "JOER", "PTRR",  "BRNR", "LNGR")
+ # All reservoirs
+ all_res_only <-c("CBRR", "JOER", "PTRR",  "BRNR", "LNGR", "COMR", "HORR")
+ 
 # 
 # #southfork reservoirs
 # SF_Res <- c("COMI", "COMR", "COMO", "HORI","HORR" , "HORO", "BEAV", "SFM")
@@ -125,6 +130,16 @@ sensor_meta <- tibble(
 #colorsBS_site_code <- c("BRNR" = "#D55E00", "CBRR" = "#F0E442", "JOER" = "#56B4E9", "LNGR" = "#0072B2", "PTRR" ="#E69F00", "COMR" = "cyan", "HORR" = "#CC79A7")
 colorsBS_site_code <- c("BRNR" = "#F94144", "PTRR" ="#F3722C", "COMR" = "#F8961E", "CBRR" = "#F9C74F", "HORR" = "#90BE6D", "JOER" = "#56B4E9", "LNGR" = "#0072B2")
 
+
+#in alphabetical order
+colorsBS_site_code_alpha <- c(
+  BRNR = "#F94144",
+  CBRR = "#F9C74F",
+  COMR = "#F8961E",
+  HORR = "#90BE6D",
+  JOER = "#56B4E9",
+  LNGR = "#0072B2",
+  PTRR = "#F3722C")
 #Color matches burn severity
 #colorsBS_in_order <-c("#0072B2","#56B4E9","#F0E442","#E69F00","#D55E00")
 
