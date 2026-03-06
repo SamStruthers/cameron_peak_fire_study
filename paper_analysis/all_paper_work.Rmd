@@ -368,19 +368,21 @@ no3_dotplot_res <-   build_res_plot(param = "NO3", binwdth = 0.09, sz = 1)+
   stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black")+
   ylim(-0.1,2.5)
 
+ DTN_dotplot_res <- build_res_plot(param = "DTN", binwdth = .04, sz = 1)+
+  stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, alpha = 0.7)
+
 DOC_dotplot_res <-  build_res_plot(param = "DOC", binwdth = .35, sz = 1.25, title_min = -2.5)+
   stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, alpha = 0.7)
 
-TSS_dotplot_res/K_dotplot_res/no3_dotplot_res/DOC_dotplot_res
+TSS_dotplot_res/K_dotplot_res/no3_dotplot_res/DTN_dotplot_res/DOC_dotplot_res
 
-ggsave("docs/cpf_reservoir/paper_draft/res_chem_dotplots.jpg", dpi = 300, width = 18, height = 14)
+ggsave("docs/cpf_reservoir/paper_draft/res_chem_dotplots.jpg", dpi = 300, width = 18, height = 16)
 
 ```
 
 ### SI Fig: Extra Dotplots
 ```{r}
- build_res_plot(param = "DTN", binwdth = .02, sz = 1, title_min = -0.2)+
-  stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, alpha = 0.7)
+
 
 ```
 
@@ -672,11 +674,10 @@ check_model_results <- map(c(param_oi), ~{
 #Seasonal Color values
 season_clp_color_vals <- c("Winter" = "#03045e",  "Rising Limb" = '#047E82',  "Peak Flow" = '#59B851', "Falling Limb"='#FA850E', "Fall Baseflow"  = "#772f1a")
 
-
 jwc_longitudinal <- tidy_chem %>%
   dplyr::filter(!is.na(ChlA)) %>%
   dplyr::filter(site_code %in% c("JOEI", "JOER", "CBRR", "CBRI", "CHD", "JWC"))%>%
-  select(Date,site_code, ChlA, NO3, Year,season, month,location_type)%>%
+  select(Date,site_code, ChlA, NO3, DTN,DOC, Year,season, month,location_type)%>%
   mutate(location_type = ifelse(location_type == "Outflow"|location_type =="Inflow", "Stream", "Reservoir"))
 
 jwc_longitudinal$site_code <- factor(jwc_longitudinal$site_code, levels = c("JOEI", "JOER", "CBRI", "CBRR", "CHD", "JWC"))
@@ -684,19 +685,23 @@ jwc_longitudinal$season <- factor(jwc_longitudinal$season, levels = c("Winter", 
 jwc_longitudinal$month <- factor(jwc_longitudinal$month, levels = c("4", "5", "6", "7", "8", "9", "10","11"))
 # Calculate the medians for ChlA
 median_data <- jwc_longitudinal %>%
-  group_by(site_code, Year, location_type) %>%
-  summarise(median_ChlA = median(ChlA, na.rm = TRUE), 
-            median_NO3 = median(NO3, na.rm = TRUE), 
-            max_ChlA = max(ChlA, na.rm = T), 
-            max_NO3 = max(NO3, na.rm = T)) %>%
+  pivot_longer(cols = c(ChlA, NO3, DTN, DOC), names_to = "parameter", values_to = "value") %>%
+  group_by(site_code, Year, location_type, parameter) %>%
+  summarise(median = median(value, na.rm = TRUE))%>%
   ungroup()%>%
-  add_row(site_code = "JWC", Year = "2021", location_type = "Stream", median_ChlA = NA, median_NO3 = NA, max_ChlA = NA, max_NO3 = NA)
+  pivot_wider(names_from = parameter, values_from = median, names_prefix = "median_") %>%
+  add_row(site_code = "JWC", Year = "2021", location_type = "Stream", median_ChlA = NA, median_NO3 = NA)
+
 median_data$site_code <- factor(median_data$site_code, levels = c("JOEI", "JOER", "CBRI", "CBRR", "CHD", "JWC"))
 
+
+jwc_long_plot <- function(param = "ChlA", dot_size = 3, b_size = 20, facet_scales = "fixed"){
+  
+  med_col_name <- paste0("median_", param)
 # Create the plot
-jwc_long_chla<-  ggplot() + 
-  geom_point(data = jwc_longitudinal, aes(x = site_code, y = ChlA, color = season),
-             size = 3 ,position = position_jitterdodge(jitter.height = 0))+
+ggplot() + 
+  geom_point(data = jwc_longitudinal, aes(x = site_code, y = .data[[param]], color = season),
+             size = dot_size, position = position_jitterdodge(jitter.height = 0))+
   geom_rect(data = median_data %>% filter(site_code %in% c("JOER", "CBRR")),
             aes(xmin = as.numeric(site_code) - 0.4, xmax = as.numeric(site_code) + 0.4, ymin = - Inf, ymax = Inf, group = Year),
             fill = "#59B851", alpha =0.2)+
@@ -705,12 +710,12 @@ jwc_long_chla<-  ggplot() +
             fill = "#002FA7", alpha =0.2)+
   scale_color_manual(values = season_clp_color_vals)+
   # Add lines connecting the medians
-  geom_line(data = median_data, aes(x = site_code, y = median_ChlA, group = Year), color = "black", linewidth = 1) +
-  geom_point(data = median_data, aes(x = site_code, y = median_ChlA, group = Year, shape = "Yearly Site Median"), color = "black", size = 3) +
+  geom_line(data = median_data, aes(x = site_code, y = .data[[med_col_name]], group = Year), color = "black", linewidth = 1) +
+  geom_point(data = median_data, aes(x = site_code, y = .data[[med_col_name]], group = Year, shape = "Yearly Site Median"), color = "black", size = dot_size) +
   scale_shape_manual(name = "", values = c("Yearly Site Median" = 16)) +  # 16 = solid circle
   guides(shape = guide_legend(override.aes = list(color = "black", size = 3))) +
-  theme_bw(base_size = 20)+
-  facet_wrap(~Year, ncol = 1, scale = "free_y")+
+  theme_bw(base_size = b_size)+
+  facet_wrap(~Year, ncol = 1, scales = facet_scales)+
   theme(axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "right")+
@@ -720,42 +725,15 @@ jwc_long_chla<-  ggplot() +
                                "CBRR" = "", 
                                "CHD" = "Below\nChambers", 
                                "JWC" = "Joe Wright Creek"))+
-  labs(y = expression(Chlorophyll ~italic("a") ~ (ug ~ L^{-1})), 
+  labs(y = chem_expressions[[param]], 
        color = "Season")
+}
 
-
-
-jwc_long_no3 <- 
-  ggplot() + 
-  geom_point(data = jwc_longitudinal, aes(x = site_code, y = NO3, color = season),size = 3 ,position = position_jitterdodge(jitter.height = 0))+
-  geom_rect(data = median_data %>% filter(site_code %in% c("JOER", "CBRR")),
-            aes(xmin = as.numeric(site_code) - 0.4, xmax = as.numeric(site_code) + 0.4, ymin = - Inf, ymax = Inf, group = Year),
-            fill = "#59B851", alpha =0.2)+
-  geom_rect(data = median_data %>% filter(site_code %in% c("JWC")),
-            aes(xmin = as.numeric(site_code) - 0.4, xmax = as.numeric(site_code) + 0.4, ymin = - Inf, ymax = Inf, group = Year),
-            fill = "#002FA7", alpha =0.2)+
-  scale_color_manual(values = season_clp_color_vals)+
-  #add a Hline for the median
-  #stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black") +
-  geom_line(data = median_data, aes(x = site_code, y = median_NO3, group = Year), color = "black", linewidth = 1) +
-  geom_point(data = median_data, aes(x = site_code, y = median_NO3, group = Year, shape = "Yearly Site Median"), color = "black", size = 3) +
-  scale_shape_manual(name = "", values = c("Yearly Site Median" = 16)) +  # 16 = solid circle
-  guides(shape = guide_legend(override.aes = list(color = "black", size = 3))) +
-  theme_bw(base_size = 20)+
-  facet_wrap(~Year, ncol = 1, scale = "free_y")+
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        #remove facet title
-        #strip.text.x = element_blank(),
-        legend.position = "none") +
-  scale_x_discrete(labels = c( "JOEI"= "  Above\nJoe Wright", 
-                               "JOER" = "", 
-                               "CBRI" = "Above\nChambers",
-                               "CBRR" = "", 
-                               "CHD" = "Below\nChambers", 
-                               "JWC" = "Joe Wright Creek")) +
-  labs(y = expression(NO[3]^{"-"} ~ (mg ~ L^{-1})))
-
+jwc_long_chla <- jwc_long_plot(param = "ChlA", dot_size = 3, b_size = 20)
+jwc_long_no3 <-  jwc_long_plot(param = "NO3", dot_size = 3, b_size = 20)
+#jwc_long_dtn <-  
+  jwc_long_plot(param = "DTN", dot_size = 3, b_size = 20, facet_scales = "free_y")
+jwc_long_doc <-  jwc_long_plot(param = "DOC", dot_size = 3, b_size = 20)                               
 
 jwc_long_chla_no3<-  jwc_long_chla+jwc_long_no3+
   plot_layout(guides = 'collect')+
@@ -1350,8 +1328,8 @@ wrap_plots(sdd_plots, ncol = 1, axes = "collect")
 ```{r}
 chem_rs <- all_rs%>%
   rename(rs_date = date)%>%
-  mutate(date_low = rs_date - days(4),
-    date_high = rs_date + days(4)) %>%
+  mutate(date_low = rs_date - days(3),
+    date_high = rs_date + days(3)) %>%
   left_join(tidy_chem, 
             by = join_by(site_code, between(y$Date, x$date_low, x$date_high)))%>%
   filter(!is.na(med_surface_C))%>%
@@ -1685,6 +1663,12 @@ sect_properties <- prop_section(
 )
 
 save_as_docx( ft3, path = here(paper_draft_dir,"SI_3_table.docx"))
+
+```
+
+## RS Results
+
+```{r}
 
 ```
 
