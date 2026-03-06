@@ -3,16 +3,43 @@ title: "Figures"
 author: "Sam Struthers"
 date: "`r Sys.Date()`"
 output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
-
+Setup
+ 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
-source("paper_analysis/00_analysis_setup.R")
-library(here)
 
-library(rstatix)
-library(tidyverse)
-library(car)
+### ----- Load packages ----- ###
+package_load <- function(package_names){
+  for(i in 1:length(package_names)){
+    if(!package_names[i] %in% installed.packages()){
+      install.packages(package_names[i])
+    }
+    library(package_names[i],character.only = TRUE)
+  }
+}
+
+#vector of packages
+pack_req <- c( 
+  # data wrangling packages
+  "janitor", "broom","readxl","here","arrow",
+  #spatial packages
+  "sf","terra","raster","tmap",
+  # plotting
+  "ggpubr","ggthemes","patchwork", "geomtextpath","plotly", "ggpmisc","officer", "flextable","kableExtra",
+  #external datasets
+  "cdssr","nhdplusTools","elevatr",
+  #stats
+  "trend", "anomalize","rstatix", "car","performance","lme4","glmmTMB","emmeans",
+  #always load tidyverse last to avoid conflicts with other packages
+  "tidyverse")
+package_load(pack_req)
+
+remove(pack_req, package_load)
+
 #basic function to save a plot in standard size, dpi and width into figures folder
 save_plot_image<- function(plot,name){
   
@@ -25,19 +52,66 @@ spatial_dir <- "data/raw/spatial/res_study"
 external_spatial <- "data/raw/external_datasets"
 
 
+#Simple function to negate %in%
+
+`%nin%` = Negate(`%in%`)
+
+# # Distance order and xdistance
+order_table <- tibble(
+  site_code = c('JOEI', 'JOER', 'CBRI', 'CBRR', 'CHD', 'BRNR', 'BMD', 'LNGR', 'LNGO', 'PTRR', 'PTRO', 'COMI', 'COMR', 'COMO', 'HORI', 'HORR', 'HORO', 'BEAV', 'JWC', 'PJW', 'PFAL', 'SLEP', 'PBR', 'SFM', 'PSF', 'PNF', 'PBD'),
+  Distance = c('1 - JOEI', '2 - JOER', '3 - CBRI', '4 - CBRR', '5 - CHD', '6', '7', '8', '9', '99', '999', '11 - COMI', '12 - COMR', '13 - COMO', '14 - HORI', '15 - HORR', '16 - HORO', '17 - BEAV', '18 - JWC', '19 - PJW','20- SLEP', '20 - SLEP', '21 - PBR', '22 - SFM', '23 - PSF', '24 - PNF', '25 - PBD'),
+  Xdistance = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 99, 999, 12, 13, 14, 15, 16, 17, 18, 19,20, 20, 21, 22, 23, 24, 25, 26),
+  order = c('03', '04', '05', '06', '07', '10', '11', '01', '02', '08', '09', '12', '13', '14', '15', '16', '17', '18', '19','20', '20', '21', '22', '23', '24', '25', '26'), 
+  BS_order =  c(NA, '2', NA, '4', NA, '7', NA, '1', NA, '6', NA, NA, '5', NA, NA, '3', NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,NA),
+)
+
+
+# Create the lookup table with expression syntax
+# Define as a named list
+chem_expressions <- list(
+  "Turbidity" = expression(Turbidity ~ (NTU)),
+  "TSS"       = expression(TSS ~ (mg ~ L^{-1})),
+  "ChlA"      = expression(Chlorophyll ~ italic("a") ~ (mu*g ~ L^{-1})),
+  "TC"        = expression(TC ~ (mg ~ L^{-1})),
+  "TN"        = expression(TN ~ (mg ~ L^{-1})),
+  "DOC"       = expression(DOC ~ (mg ~ L^{-1})),
+  "DTN"       = expression(DTN ~ (mg ~ L^{-1})),
+  "pH"        = expression(pH),
+  "ANC"       = expression(ANC ~ (mu*eq ~ L^{-1})),
+  "SC"        = expression(SC ~ (mu*S ~ cm^{-1})),
+  "Na"        = expression(Na^{"+"} ~ (mg ~ L^{-1})),
+  "NH4"       = expression(NH[4]^{"+"} ~ (mg ~ L^{-1})),
+  "K"         = expression(K^{"+"} ~ (mg ~ L^{-1})),
+  "Mg"        = expression(Mg^{"2+"} ~ (mg ~ L^{-1})),
+  "Ca"        = expression(Ca^{"2+"} ~ (mg ~ L^{-1})),
+  "F"         = expression(F^{"-"} ~ (mg ~ L^{-1})),
+  "Cl"        = expression(Cl^{"-"} ~ (mg ~ L^{-1})),
+  "NO3"       = expression(NO[3]^{"-"} ~ (mg ~ L^{-1})),
+  "PO4"       = expression(PO[4]^{"3-"} ~ (mg ~ L^{-1})),
+  "SO4"       = expression(SO[4]^{"2-"} ~ (mg ~ L^{-1}))
+)
+
+ primary_study_res <-c("CBRR", "JOER", "PTRR",  "BRNR", "LNGR")
+ all_reservoirs <- c("COMR", "HORR", "CBRR", "JOER", "PTRR", "BRNR", "LNGR")
+ all_res_system <- c("COMI", "COMR", "COMO", "HORI","HORR" , "HORO","CBRR", "CHD", "JOEI", "JOER", "CBRI", "PTRR", "PTRO", "BMD", "BRNR", "LNGO", "LNGR")
+
+### ----- Color Sets ----- ###
+
+cbbPalette <- c( "#999999","#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+#Color for reservoirs, matches burn severity by site code
+
+colorsBS_site_code <- c("BRNR" = "#d71a1d", "PTRR" ="#F3722C", "COMR" = "#F8961E", "CBRR" = "#F9C74F", "HORR" = "#F0E442", "JOER" = "#56B4E9", "LNGR" = "#0072B2")
 #Seasonal Color values
 season_clp_color_vals <- c("Winter" = "#03045e",  "Rising Limb" = '#047E82',  "Peak Flow" = '#59B851', "Falling Limb"='#FA850E', "Fall" = "#772f1a")
 
 ```
 
+
 # Grab data
 
 ```{r}
-
 #discrete sample data and location metadata from most recent pub
-data_version = "v2025.11.14"
-
-
 data_folder <- here("data/raw/chem/ross_clp_chem/v2025.11.14")
 
 most_recent_chem <- read_rds(here(data_folder, "data/cleaned/CLP_chemistry_up_to_20251114.rds"))%>%
@@ -60,17 +134,13 @@ tidy_chem <- most_recent_chem%>%
   mutate(location_type = if_else(site_code == "PFAL", "Mainstem", location_type))%>%
   # add order table which gives the sites an order to be plotted in
   left_join(order_table, by = "site_code")%>%
-  #calculate nitrogen variables as mg/L of N instead of mg/L of NH4 or NO3
-  mutate(n_nh4 = NH4 * 0.7765, 
-         n_no3 = NO3 * 0.2259, 
-         #calculate DIN and DON
-         DIN = n_nh4 + n_no3,
-         DON = DTN - DIN)%>%
   #filter site code BRNR with chla value of 0.02, seems to be sample error
   filter(!(site_code == "BRNR" & ChlA == 0.02))%>%
   #filter site code CBRR with TSS value > 1000, seems to be sample error
-  mutate( TSS = case_when((site_code == "CBRR" & TSS > 1000) ~ NA_real_,
-                          TRUE ~ TSS), 
+  mutate( TSS = case_when((site_code == "CBRR" & TSS > 250) ~ NA_real_,
+                          TRUE ~ TSS),
+           Turbidity = case_when((site_code == "CBRR" & Turbidity > 250) ~ NA_real_,
+                          TRUE ~ Turbidity), 
           Year = as.character(Year), 
           month = as.character(month(Date)),
           season = case_when(
@@ -85,8 +155,6 @@ tidy_chem <- most_recent_chem%>%
           site_year = paste(site_code, Year, sep = "_")
   )
 
-#site order now added to tidy chem and thus not needed
-rm( most_recent_chem, data_version)
 ```
 
 ## Run above to get data loaded
@@ -96,325 +164,64 @@ rm( most_recent_chem, data_version)
 ```
 
 
-# SI Tables
+There will be five main figures in this paper: - Key nutrient dotplot
+(NO3, NH4, K, DOC) No COMR/HORR - Chla dot plot (All sites) - NO3 chla
+JWC relationship - SF Chla (on vs off reservoir) - CLP Mainstem
+Longitudinal (Chl-a), NO3?
 
-## PO4 
+# Nutrient Comparison Between reservoirs
 
-Looking at where PO4 is present (above 0.01 detection limit) and if that is changing over time
+### Functions
+
 
 ```{r}
 
-upper_PO4 <- filter(tidy_chem, watershed %nin% c("CLP Mainstem - Lower","CLP Tributary - Lower"))%>%
-  select(site_code,location_type, Date, Turbidity, PO4, Year)%>%
-  mutate(location_type = case_when(
-    site_code %in% c("JWC", "BEAV", "LBEA", "PENN", "SFM", "SAWM", "JOEI", "CBRI", "COMI", "HORI") ~ "Tributary",
-    TRUE ~ location_type))%>%
-  group_by(location_type, Year)%>%
-  # fina what percent of each year had PO4 levels above 0.01 and get the mean level for each location type and year
-  summarise(total_samples = n(),
-            PO4_perc_dect = sum(PO4 >= 0.01, na.rm = TRUE)/n()* 100,
-            #calculate mean of PO4 for only samples above 0.01, excluding samples lower than 0.01
-            mean_PO4 = mean(PO4[PO4 >= 0.01], na.rm = TRUE),
-            samples = paste0(sum(PO4 >= 0.01, na.rm = TRUE),"/",n() ))%>%
-  # pivot wider by year
-  pivot_wider(names_from = Year, values_from = c(total_samples, PO4_perc_dect, mean_PO4, samples)) %>%
-  mutate(across(total_samples_2021:mean_PO4_2024, ~replace_na(.x, 0)))%>%
-  mutate(across(samples_2021:samples_2024, ~replace_na(.x, "0/0")))%>%
-  # if a column is numeric, round it to 2 decimal places
-  mutate(across(where(is.numeric), ~round(.x, 2)))%>%
-  arrange(factor(location_type, levels = c("Inflow", "Reservoir", "Outflow", "Mainstem", "Tributary")))%>%
-  select(location_type, total_samples_2021:mean_PO4_2024)
+#Code for violin plot plus jittered points with median line
 
-#### Creating Table ####
-# Add spacer columns
-upper_PO4_with_spacers <- upper_PO4 %>%
-  mutate(sp1 = NA, sp2 = NA, sp3 = NA) %>%
-  select(1, 2:5, sp1, 6:9, sp2, 10:13, sp3)
-
-# Rename columns with valid names
-colnames(upper_PO4_with_spacers) <- c(
-  "Site_Type",           # 1
-  "n_2021", "n_2022", "n_2023", "n_2024", "sp1",  # 2-6
-  "pct_2021", "pct_2022", "pct_2023", "pct_2024", "sp2",  # 7-11
-  "mean_2021", "mean_2022", "mean_2023", "mean_2024", "sp3" # 12-16
-)
-
-# Create the flextable
-ft1 <- flextable(upper_PO4_with_spacers) %>%
-  set_header_labels(
-    Site_Type = "",
-    n_2021 = "2021", n_2022 = "2022", n_2023 = "2023", n_2024 = "2024",
-    pct_2021 = "2021", pct_2022 = "2022", pct_2023 = "2023", pct_2024 = "2024",
-    mean_2021 = "2021", mean_2022 = "2022", mean_2023 = "2023", mean_2024 = "2024",
-    sp1 = "", sp2 = "", sp3 = ""
-  ) %>%
-  add_header_row(
-    values = c("Site Type", "Samples per Year", "", "Percent above Detection Limit", "", 
-               "Mean PO4 Above Detection Limit", ""),
-    colwidths = c(1, 4, 1, 4, 1, 4, 1)
-  ) %>%
-  theme_vanilla() %>%
-  align(align = "center", part = "all") %>%
-  valign(valign = "center", part = "all") %>%
-  fontsize(size = 11, part = "all") %>%
-  font(fontname = "Times New Roman", part = "all") %>%
-  set_table_properties(layout = "autofit", width = 1)%>%
-  autofit()
-
-ft1
-save_as_docx(ft1,path = here(paper_draft_dir,"SI_1_Table.docx"))
-
-
-```
-
-## Key Constiuent Table
-
-Calculate mean and max for key constituents for the 5 main study reservoirs
-
-```{r}
-
-key_table <- tidy_chem %>%
-  filter(site_code %in% c("LNGR", "JOER","COMR", "HORR",  "CBRR", "PTRR", "BRNR")) %>%
-  select(site_code, Year, pH,SC,TSS, DOC, DTN, K,NH4,NO3, SO4) %>%
-  pivot_longer(cols = c(pH,SC,TSS, DOC, DTN, K,NH4,NO3, SO4),
-               names_to = "parameter",
-               values_to = "value") %>%
-  #get the median and max for each site
-  group_by(site_code, parameter) %>%
-  summarise(median = median(value, na.rm = TRUE),
-            sd = sd(value, na.rm = TRUE),
-            max = max(value, na.rm = TRUE)) %>%
-  ungroup()%>%
-  pivot_longer(cols = c(median, max, sd),
-               names_to = "stat",
-               values_to = "stat_value")%>%
-  unite("param_stat", parameter, stat, sep = " ") %>%
-  pivot_wider(names_from = param_stat, values_from = stat_value)%>%
-  arrange(factor(site_code, levels = c("LNGR", "JOER", "HORR", "COMR", "CBRR", "PTRR", "BRNR")))%>%
-  select(site_code:`NO3 sd`,`SO4 median`:`pH sd`, `SC median`,`SC max`,`SC sd`)%>%
-  #round all numeric values to 2 digits
-  mutate(across(where(is.numeric), ~ round(.x, 2)))
-
-
-param_oi <- c("DOC", "DTN", "K", "NH4", "NO3", "SO4", "TSS", "pH", "SC")
-
-params <- chem_units %>%
-  filter(simple %in% param_oi) %>%
-  arrange(match(simple, param_oi)) %>%
-  pull(Parameters)
-
-
-# Create a basic flextable
-ft2 <- key_table %>%
-  rename(Site = site_code) %>%
-  flextable() %>%
-  set_header_labels(
-    .labels = setNames(rep(c("mean", "max", "sd"), times = length(params)),
-                      nm = as.vector(t(outer("", c("median", "max","sd"), paste, sep = " "))))) %>%
-  delete_part(part = "header")%>%
-  add_header_row(
-    values = c("", rep(c("Median", "Max", "SD"), times = length(params))),  
-    colwidths = c(1, rep(1, length(params)*3))  # Adjust colwidths for Site and parameters
-  ) %>%
-  add_header_row(
-    values = c("Site", params), 
-    colwidths = c(1, rep(3, length(params)))  # Adjust colwidths for Site and parameters
-  ) %>%
-  
-  add_header_row(
-    values = c("", 
-                "mg L⁻¹", "mg L⁻¹", "mg L⁻¹", 
-               "mg L⁻¹", "mg L⁻¹", "mg L⁻¹", "mg L⁻¹",  " ", "µS cm⁻¹"), 
-    colwidths = c(1, rep(3, length(params)))  # Adjust colwidths again to match
-  ) %>%
-  merge_v(j = ~Site) %>%
-  merge_h(part = "header") %>%
-  border_remove() %>%
-  border_outer() %>%
-  border_inner_v() %>%
-  border_inner_h() %>%
-  align(align = "center", part = "all") %>%
-  valign(valign = "center", part = "all") %>%
-  fontsize(size = 11, part = "all") %>%
-  font(fontname = "Times New Roman", part = "all") %>%
-  set_table_properties(layout = "autofit", width = 1)%>%
-  autofit()
-
-sect_properties <- prop_section(
-  page_size = page_size(
-    orient = "landscape",
-    width = 8.3, height = 11.7
-  ),
-  type = "continuous",
-  page_margins = page_mar()
-)
-
-save_as_docx( ft2, path = here(paper_draft_dir,"SI_2_table.docx"))
-
-```
-
-### Same table but for all other parameters
-
-```{r}
-
-base_cations_table <- tidy_chem %>%
-  filter(site_code %in% c("LNGR", "JOER","COMR", "HORR",  "CBRR", "PTRR", "BRNR")) %>%
-  select(site_code, Year, ANC, Na, Mg, Ca, F, Cl) %>%
-  pivot_longer(cols = c(ANC, Na, Mg, Ca, F, Cl),
-               names_to = "parameter",
-               values_to = "value") %>%
-  #get the median and max for each site
-  group_by(site_code, parameter) %>%
-  summarise(median = median(value, na.rm = TRUE),
-            max = max(value, na.rm = TRUE),
-            sd = sd(value,na.rm = T)) %>%
-  ungroup()%>%
-  pivot_longer(cols = c(median, max,sd),
-               names_to = "stat",
-               values_to = "stat_value")%>%
-  unite("param_stat", parameter, stat, sep = " ") %>%
-  pivot_wider(names_from = param_stat, values_from = stat_value)%>%
-  arrange(factor(site_code, levels = c("LNGR", "JOER", "HORR", "COMR", "CBRR", "PTRR", "BRNR")))%>%
-  #round all numeric values to 2 digits
-  mutate(across(where(is.numeric), ~ round(.x, 2)))
-
-
-param_oi <- c("ANC", "Ca", "Cl", "F", "Mg", "Na")
-
-params <- chem_units %>%
-  filter(simple %in% param_oi) %>%
-  arrange(match(simple, param_oi)) %>%
-  pull(Parameters)
-
-
-# Create a basic flextable
-ft3 <- base_cations_table %>%
-  rename(Site = site_code) %>%
-  flextable() %>%
-  set_header_labels(
-    .labels = setNames(rep(c("mean", "max", "sd"), times = length(params)),
-                      nm = as.vector(t(outer("", c("median", "max","sd"), paste, sep = " "))))) %>%
-  delete_part(part = "header")%>%
-  add_header_row(
-    values = c("", rep(c("Median", "Max", "SD"), times = length(params))),  
-    colwidths = c(1, rep(1, length(params)*3))  # Adjust colwidths for Site and parameters
-  ) %>%
-  add_header_row(
-    values = c("Site", params), 
-    colwidths = c(1, rep(3, length(params)))  # Adjust colwidths for Site and parameters
-  ) %>%
-  
-  add_header_row(
-    values = c("", 
-                "mg L⁻¹", "mg L⁻¹", "mg L⁻¹", 
-               "mg L⁻¹", "mg L⁻¹", "mg L⁻¹"), 
-    colwidths = c(1, rep(3, length(params)))  # Adjust colwidths again to match
-  ) %>%
-  merge_v(j = ~Site) %>%
-  merge_h(part = "header") %>%
-  border_remove() %>%
-  border_outer() %>%
-  border_inner_v() %>%
-  border_inner_h() %>%
-  align(align = "center", part = "all") %>%
-  valign(valign = "center", part = "all") %>%
-  fontsize(size = 11, part = "all") %>%
-  font(fontname = "Times New Roman", part = "all") %>%
-  set_table_properties(layout = "autofit", width = 1)%>%
-  autofit()
-
-sect_properties <- prop_section(
-  page_size = page_size(
-    orient = "landscape",
-    width = 8.3, height = 11.7
-  ),
-  type = "continuous",
-  page_margins = page_mar()
-)
-
-save_as_docx( ft3, path = here(paper_draft_dir,"SI_3_table.docx"))
-
+# ggplot(boxplot_res, aes(x = reorder(site_year, BS_order, max), 
+#                        y = .data[[param]], 
+#                        fill = site_code)) + 
+#   # Switched to violin plot with width proportional to sample size
+# geom_violin(scale = "count", width = 4, alpha = 0.5, color = NA) + 
+#   geom_jitter(color = "black", size = 0.8, alpha = 0.3, 
+#               position = position_jitter(width = 0.15)) +  
+#   stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black") +
+#   # Custom rectangles for site grouping
+#   geom_rect(inherit.aes = FALSE, aes(xmin = "LNGR 2021", xmax = "LNGR 2024", ymin = title_min, ymax = 0), 
+#             color = "transparent", fill = "#0072B2", alpha = 0.01) + 
+#   geom_rect(inherit.aes = FALSE, aes(xmin = "JOER 2021", xmax = "JOER 2024", ymin = title_min, ymax = 0), 
+#             color = "transparent", fill = "#56B4E9", alpha = 0.05) + 
+#   geom_rect(inherit.aes = FALSE, aes(xmin = "CBRR 2021", xmax = "CBRR 2024", ymin = title_min, ymax = 0), 
+#             color = "transparent", fill = "#F9C74F", alpha = 0.05) + 
+#   geom_rect(inherit.aes = FALSE, aes(xmin = "PTRR 2021", xmax = "PTRR 2024", ymin = title_min, ymax = 0), 
+#             color = "transparent", fill = "#F3722C", alpha = 0.05) + 
+#   geom_rect(inherit.aes = FALSE, aes(xmin = 16.5, xmax = 20.5, ymin = title_min, ymax = 0), 
+#             color = "transparent", fill = "#d71a1d", alpha = 0.008) + 
+#   
+#   # Reference line and site labels
+#   geom_abline(aes(slope = 0, intercept = 0), color = '#000000', linetype = "solid") + 
+#   geom_text(aes(x = 2.5, y = (title_min/2), label = "Long Draw"), color = "#000000", size = 6) + 
+#   geom_text(aes(x = 6.5, y = (title_min/2), label = "Joe Wright"), color = "#000000", size = 6) + 
+#   geom_text(aes(x = 10.5, y = (title_min/2), label = "Chambers"), color = "#000000", size = 6) + 
+#   geom_text(aes(x = 14.5, y = (title_min/2), label = "Peterson"), color = "#000000", size = 6) + 
+#   geom_text(aes(x = 18.5, y = (title_min/2), label = "Barnes Meadow"), color = "#000000", size = 5) + 
+#   
+#   # Scales and Themes
+#   scale_fill_manual(name = "Watershed", values = colorsBS_site_code) + 
+#   scale_color_grey(start = 0.4, end = 0) + 
+#   theme_bw(base_size = 25) + 
+#   labs(x = "Site", y = param_units) + 
+#   scale_x_discrete(labels = c("2021", "2022", "2023", "2024", "", "", "", "", 
+#                               "2021", "2022", "2023", "2024", "", "", "", "", 
+#                               "2021", "2022", "2023", "2024")) + 
+#   theme(legend.position = "none",
+#         axis.title = element_text(face = "bold"),
+#         axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"))
 ```
 
 
-
-
-## SI Plot 1: Timelines of key parameters at reservoirs 
-
 ```{r}
-
-SI_plot <- tidy_chem %>%
-  filter(site_code %in% c("LNGR", "JOER","COMR", "HORR",  "CBRR", "PTRR", "BRNR"))%>%
-  pivot_longer(cols = c( ChlA, DTN, pH, SC, DOC, K, NH4, NO3, SO4, K, Ca, ANC, Na, Mg, Ca, F, Cl),
-               names_to = "parameter",
-               values_to = "value")%>%
-  left_join(chem_units, by = c("parameter" = "simple"))%>%
-  mutate(Date = as.POSIXct(Date ))
-
-
-#plot 1 
-
-Si_timeline_1 <- ggplot(SI_plot%>%filter(parameter %in% c("DOC", "DTN","pH", "SC", "ANC"))%>%
-         mutate(parameter = factor(parameter, levels = c("DOC", "DTN","pH", "SC", "ANC"))),
-       aes(x = Date, y = value, group = interaction(site_code, Year), color = site_code)) +
-  geom_line() +
-  geom_point()+
-  facet_grid(rows = vars(combined),cols = vars(Year), scales = "free", switch = "y") +
-  labs(x = "Date",
-       y = "") +
-  scale_color_manual(values = colorsBS_site_code)+
-  scale_x_datetime(
-    date_labels = "%b",  # e.g., May\n2021
-    date_breaks = "month"
-  ) +
-  labs(color = "Site")+
-  theme_bw() +
-  theme(strip.placement = "outside", 
-        legend.position = "bottom",
-        # make the x ticks at 45 degrees
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-save_plot_image(Si_timeline_1,"SI_timeline_1.png")
-
-
-SI_timeline_2 <- 
-ggplot(SI_plot%>%filter(parameter %in% c("K", "Ca","SO4", "Na", "Cl", "Mg", "F")),
-       aes(x = Date, y = value, group = interaction(site_code, Year), color = site_code)) +
-  geom_line() +
-  geom_point()+
-  facet_grid(rows = vars(combined),cols = vars(Year), scales = "free", switch = "y") +
-  labs(x = "Date",
-       y = "") +
-  scale_color_manual(values = colorsBS_site_code)+
-  scale_x_datetime(
-    date_labels = "%b",  # e.g., May\n2021
-    date_breaks = "month"
-  ) +
-  labs(color = "Site")+
-  theme_bw() +
-  theme(strip.placement = "outside", 
-        legend.position = "bottom",
-        # make the x ticks at 45 degrees
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-save_plot_image(Si_timeline_2,"SI_timeline_2.png")
-
-```
-
-
-# Main Figures
-
-There will be four main figures in this paper:
-- Key nutrient dotplot
-- Chla dot plot
-- NO3 chla JWC relationship
-- SF Chla (on vs off reservoir)
-
-
-## Key Nutrient Dot Plot
-
-### Function
-```{r}
+#Original function with no COMR/HORR and just dotplot with title always
 build_res_dotplot<- function(param = "ChlA", binwdth = 0.3, sz = 1, title_min = -.7){
   
     boxplot_res <- filter(tidy_chem, site_code %in% c("LNGR", "PTRR", "BRNR", "JOER", "CBRR") )%>%
@@ -425,7 +232,9 @@ build_res_dotplot<- function(param = "ChlA", binwdth = 0.3, sz = 1, title_min = 
       pull(combined)
     
     #Create plot
-    ggplot(boxplot_res, aes(x=reorder(site_year,BS_order,max),y=.data[[param]], middle=mean(.data[[param]]), fill=site_code)) + 
+    ggplot(boxplot_res, aes(x=reorder(site_year,BS_order,max),y=.data[[param]], 
+                            #middle=mean(.data[[param]]), 
+                            fill=site_code)) + 
       geom_dotplot(stackgroups = FALSE, binaxis = "y", method = "histodot",stackdir = "center", position = "dodge", binwidth = binwdth, dotsize = sz)+
       scale_color_grey(start = 0.4, end = 0)+
       #make x axis titles vertical
@@ -465,105 +274,538 @@ build_res_dotplot<- function(param = "ChlA", binwdth = 0.3, sz = 1, title_min = 
             # bold and angle x axis titles to 45
             axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"))
 }
-
-
 ```
 
 ```{r}
-build_res_dotplot_concise <- function(param = "K", binwdth = .05, sz = .5){
+build_res_plot <- function(param = "ChlA", binwdth = 0.3, sz = 1, title_min = NULL, b_size = 20) {
+  # Order: Long Draw, Joe Wright, Hourglass, Chambers, Comanche, Peterson, Barnes Meadow
+  sites <- c("LNGR", "JOER", "HORR", "CBRR", "COMR", "PTRR", "BRNR")
+
+  y_label <- chem_expressions[[param]]  
+
+
+  boxplot_res <- tidy_chem %>%
+    filter(site_code %in% sites) %>%
+    filter(!is.na(.data[[param]])) %>%
+    mutate(site_year = paste(site_code, Year, sep = " "), 
+           BS_order = as.numeric(BS_order))
   
-    
-    boxplot_res <- filter(tidy_chem, site_code %in% c("LNGR", "PTRR", "BRNR", "JOER", "CBRR") )%>%
-      filter(!is.na(.data[[param]]))%>%
-      mutate(site_year = paste(site_code, Year, sep = " "),
-             dayofyear = yday(Date))
-    param_units <- filter(chem_units, simple == param)%>%
-      pull(combined)
-    
-    #Create plot
-    ggplot(boxplot_res, aes(x=reorder(site_year,BS_order,max),y=.data[[param]], middle=mean(.data[[param]]), fill=site_code)) + 
-      geom_dotplot(stackgroups = FALSE, binaxis = "y", method = "histodot",stackdir = "center", position = "dodge", binwidth = binwdth, dotsize = sz)+
-      scale_color_grey(start = 0.4, end = 0)+
-      #make x axis titles vertical
-      theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-      # geom_rect( inherit.aes=FALSE, aes(xmin="LNGR 2021", xmax="LNGR 2023", ymin=title_min,
-      #                                   ymax=0), color="transparent", fill="#0072B2", alpha=0.05)+
-      # geom_rect( inherit.aes=FALSE, aes(xmin="JOER 2021", xmax="JOER 2023", ymin=title_min,
-      #                                   ymax=0), color="transparent", fill="#56B4E9", alpha=0.05)+
-      # 
-      # geom_rect( inherit.aes=FALSE, aes(xmin="CBRR 2021", xmax="CBRR 2023", ymin=title_min,
-      #                                   ymax= 0), color="transparent", fill="#F9C74F", alpha=0.05)+
-      # 
-      # geom_rect( inherit.aes=FALSE, aes(xmin="PTRR 2021", xmax="PTRR 2023", ymin=title_min,
-      #                                   ymax=0), color="transparent", fill="#F3722C", alpha=0.05)+
-      # geom_rect( inherit.aes=FALSE, aes(xmin= 12.75, xmax= 15.25, ymin=title_min,
-      #                                   ymax=0), color="transparent", fill="#d71a1d", alpha=0.05)+
-      # geom_abline(aes(slope=0, intercept=0), color='#000000', linetype="solid") +
-      # geom_text(aes(x= 2, y = (title_min/2), label= "Long Draw",  color = "#000000"), size = 6, alpha = 1)+
-      # geom_text(aes(x= 5, y = (title_min/2), label= "Joe Wright",  color = "#000000"), size = 6, alpha = 1)+
-      # geom_text(aes(x= 8, y = (title_min/2), label= "Chambers",  color = "#000000"), size = 6, alpha = 1)+
-      # geom_text(aes(x= 11, y = (title_min/2), label= "Peterson",  color = "#000000"), size = 6)+
-      # geom_text(aes(x= 14, y = (title_min/2), label= "Barnes Meadow",  color = "#000000"), size = 5, alpha = 1)+
-      # 
-      # 
-      scale_fill_manual(name="Watershed", values = colorsBS_site_code) +
-      theme_bw(base_size=25) +
+  # Inject 6 gaps between the 7 reservoirs
+  gaps <- data.frame(
+    site_year = paste0("Gap", 1:8),
+    site_code = NA, 
+    BS_order = c(0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5) 
+  )
+  
+  plot_data <- bind_rows(boxplot_res, gaps)
+  
+  # 2. Build Base Plot
+  p <- ggplot(plot_data, aes(x = reorder(site_year, BS_order, max), y = .data[[param]], fill = site_code))
+  
+  # 3. Conditional Annotations
+  if (!is.null(title_min)) {
+    p <-  p +
+      # Site Grouping Backgrounds
+      geom_rect(inherit.aes=FALSE, aes( ymin=title_min, ymax=-0.01),xmin = 1.5, xmax = 5.5, fill="#0072B2", alpha=0.01) + #LNGR
+      geom_rect(inherit.aes=FALSE, aes( ymin=title_min, ymax=-0.01),xmin = 6.5, xmax = 10.5, fill="#56B4E9", alpha=0.05) + #JOER
+      geom_rect(inherit.aes=FALSE, aes( ymin=title_min, ymax=-0.01),xmin = 11.5, xmax = 15.5, fill="#F0E442", alpha=0.05) + #HORR
+      geom_rect(inherit.aes=FALSE, aes( ymin=title_min, ymax=-0.01),xmin = 16.5, xmax = 20.5, fill="#F9C74F", alpha=0.05) + #CBRR
+      geom_rect(inherit.aes=FALSE, aes( ymin=title_min, ymax=-0.01),xmin = 21.5, xmax = 25.5, fill="#F8961E", alpha=0.05) + #COMR
+      geom_rect(inherit.aes=FALSE, aes( ymin=title_min, ymax=-0.01),xmin = 26.5, xmax = 30.5, fill="#F3722C", alpha=0.05) + #PTRR
+      geom_rect(inherit.aes=FALSE, aes( ymin=title_min, ymax=-0.01), xmin = 31.5, xmax = 35.5, fill="#d71a1d", alpha=0.008) + #BRNR
       
-      #theme(axis.text.x = ifelse(study_reservoir_chla$Location == "Reservoir",element_text(face = "bold"),element_text(face = "plain"))) +
-      labs( x = "Site", y = param_units)+
-      # scale_x_discrete(labels = c("2021", "2022", "2023","", "", "","2021", "2022", "2023","", "", "","2021", "2022", "2023", "", "", "", "2021", "2022", "2023"))+
-      theme(legend.position = "none",
-            axis.title = element_text(face = "bold"),
-            # bold and angle x axis titles to 45
-            axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"))
+      # Labels positioned at the center of each 4-year block (allowing for gaps)
+      annotate("text", x = 3.5,  y = title_min/2, label = "Long Draw", size = 6) +
+      annotate("text", x = 8.5,  y = title_min/2, label = "Joe Wright", size = 6) +
+      annotate("text", x = 13.5, y = title_min/2, label = "Hourglass", size = 6) +
+      annotate("text", x = 18.5, y = title_min/2, label = "Chambers", size = 6) +
+      annotate("text", x = 23.5, y = title_min/2, label = "Comanche", size = 6) +
+      annotate("text", x = 28.5, y = title_min/2, label = "Peterson", size = 6) +
+      annotate("text", x = 33.5, y = title_min/2, label = "Barnes Meadow", size = 5) +
+      geom_dotplot(stackgroups = FALSE, binaxis = "y", method = "histodot",stackdir = "center", position = "dodge", binwidth = binwdth, dotsize = sz)+
+      geom_abline(intercept = 0, slope = 0, color = "black") +
+      scale_fill_manual(values = colorsBS_site_code) +
+      theme_bw(base_size = b_size) +
+      labs(y = y_label, x = NULL)+
+      theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+            legend.position = "none") +
+      # This function cleans the X-axis: removes site names and hides "Gap" labels
+      scale_x_discrete(labels = function(x) ifelse(grepl("Gap", x), "", gsub(".* ", "", x)))+
+      scale_y_continuous(expand = expansion(mult = c(0, 0.05)))
+    
+  } else {
+    p <- p+
+      geom_dotplot(stackgroups = FALSE, binaxis = "y", method = "histodot",stackdir = "center", position = "dodge", binwidth = binwdth, dotsize = sz)+
+      geom_abline(intercept = 0, slope = 0, color = "black") +
+      scale_fill_manual(values = colorsBS_site_code) +
+      theme_bw(base_size = b_size) +
+      labs(y = y_label, x = NULL)+
+      theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "none"
+      )
+  }
+  
+  return(p)
 }
 ```
 
-### NO3 DOC K NH4 Dotplots
+
+
+### Plots with COMR/HORR
 
 ```{r}
-no3_dotplot_res<- 
-  build_res_dotplot_concise(param = "NO3", binwdth = .06, sz = 1)+
-  ylim(0,1.5)+
-  stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black") +
-  theme(axis.text.x = element_blank(), 
-        axis.title.x = element_blank(), 
-        axis.ticks.x = element_blank())
+TSS_dotplot_res <-  build_res_plot(param = "TSS", binwdth = .4, sz = 5)+
+  ylim(-0.5,50)+
+  stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black")
 
-K_dotplot_res<- 
-  build_res_dotplot_concise(param = "K", binwdth = .065, sz = 1)+
-  stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black") +
-  theme(axis.text.x = element_blank(), 
-        axis.title.x = element_blank(), 
-        axis.ticks.x  = element_blank())
+K_dotplot_res <-  build_res_plot(param = "K", binwdth = .045, sz = 1)+
+  stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black")
 
-DOC_dotplot_res <- 
-  build_res_dotplot_concise(param = "DOC", binwdth = .25, sz = 2)+
+no3_dotplot_res <-   build_res_plot(param = "NO3", binwdth = 0.09, sz = 1)+
   stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black")+
-  theme(axis.text.x = element_blank(), 
-        axis.title.x = element_blank(), 
-        axis.ticks.x = element_blank())
-NH4_dotplot_res <-
-  build_res_dotplot(param = "NH4", binwdth = .01, sz = 1.5, title_min = -.025)+
-  stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black")+
-  ylab("NH4+ (mg/L)")+
-  theme( axis.title.x = element_blank())+
-  ylim(-.025,0.2)
+  ylim(-0.1,2.5)
 
+ DTN_dotplot_res <- build_res_plot(param = "DTN", binwdth = .04, sz = 1)+
+  stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, alpha = 0.7)
 
- DOC_k_no3_nh4_dotplot <-  DOC_dotplot_res/K_dotplot_res/no3_dotplot_res/NH4_dotplot_res+
-  plot_layout(guides = 'collect')
- 
- DOC_k_no3_nh4_dotplot
+DOC_dotplot_res <-  build_res_plot(param = "DOC", binwdth = .35, sz = 1.25, title_min = -2.5)+
+  stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, alpha = 0.7)
 
+TSS_dotplot_res/K_dotplot_res/no3_dotplot_res/DTN_dotplot_res/DOC_dotplot_res
 
- ggsave(filename = here(paper_draft_dir, "DOC_K_NO3_NH4_dotplot.png"), plot = DOC_k_no3_nh4_dotplot, width = 20, height = 16, units = "in", dpi = 300)
+ggsave("docs/cpf_reservoir/paper_draft/res_chem_dotplots.jpg", dpi = 300, width = 18, height = 16)
 
 ```
 
-## Chl-a dotplot
+### SI Fig: Extra Dotplots
+```{r}
+
+
+```
+
+
+### Stats
+
+Reservoirs Only
+
+##### Normality
 
 ```{r}
+chem_transformed_res <- tidy_chem%>%
+  filter(site_code %in% primary_study_res) %>%
+  pivot_longer(cols = c(Turbidity, TSS, DTN,  DOC:NO3, SO4), 
+               names_to = "param", 
+               values_to = "value")%>%
+  select(site_code, Date, Year, param, value, burn_group,season)%>%
+  mutate(burn_group = factor(burn_group, levels = c("unburned", "burned")),
+         Year = factor(Year, levels = c("2021", "2022", "2023", "2024")), 
+         season = factor(season),
+         site_code = factor(site_code, levels = c("LNGR", "JOER", "CBRR", "PTRR", "BRNR")))%>%
+  mutate(log_value = log10(value +1 ))%>%
+  na.omit()
+
+param_oi <- c( "Turbidity", "TSS", "DTN","NH4", "K", "DOC", "NO3", "SO4")
+
+ggplot(chem_transformed_res%>%filter(param %in% param_oi), aes(x = value, fill = burn_group))+
+  geom_histogram(position = "stack")+
+  geom_vline(aes(xintercept = 0.05), color = "red", linetype = "dashed")+
+  facet_wrap(~param, scales = "free")
+
+ggplot(chem_transformed_res%>%filter(param %in% param_oi), aes(x = log_value, fill = burn_group))+
+  geom_histogram(position = "stack")+
+  facet_wrap(~param, scales = "free")
+
+```
+
+Nothing without transformation is normal, we should double check model
+assumptions with `check_model()` after creating a model then only
+evaluate those that do. We will want to use a linear mixed effects model
+to compare out burned vs unburned reservoirs
+
+##### Burned vs Unburned
+
+Fixed effects: burn type random effect: site
+
+```{r}
+burn_group_check <- map(c( "Turbidity", "TSS", "DTN","NH4", "K", "DOC", "NO3", "SO4"), ~{
+  
+  #Since NO3 does not fit a normal distribution, we will use a generalized linear mixed model with a gamma distribution and log link for NO3, and linear mixed models for the other parameters.
+  if(.x == "NO3"){
+        model_gamma <- glmmTMB(value ~ burn_group + (1 | site_code), 
+                       data = chem_transformed_res%>%filter(param == .x & value > 0), 
+                       family = Gamma(link = "log"))
+        
+        check_model(model_gamma)
+  }
+  
+   df <- chem_transformed_res%>%filter(param == .x)
+   
+   
+   model_full <- lmer(log_value ~ burn_group + (1|site_code), data = df, REML = FALSE)
+
+    check_model(model_full)
+
+})%>%
+  set_names(param_oi)
+
+# If they pass the model diagnostics, extract the estimate for burn_group and calculate the percent difference between burned and unburned reservoirs. Then compare the full model to a null model without burn_group using an ANOVA to get the p-value for the effect of burn_group.
+
+
+map(c( "Turbidity", "TSS", "DTN", "DOC", "SO4", "K", "NO3"), ~{
+  
+  if(.x == "NO3"){
+    model_gamma <- glmmTMB(value ~ burn_group + (1 | site_code), 
+                           data = chem_transformed_res%>%filter(param == .x & value > 0), 
+                           family = Gamma(link = "log"))
+    
+    conf <- confint(model_gamma, parm = "beta_")
+    low_pct <- ((exp(conf[2,1])) - 1)*100
+    high_pct <- ((exp(conf[2,2])) - 1)*100
+    
+    estimate <- ((summary(model_gamma)$coefficients$cond["burn_groupburned", "Estimate"]))
+    pct_diff <- ((exp(estimate)) - 1)*100
+    model_null <- glmmTMB(value ~ 1 + (1 | site_code), 
+                          data = chem_transformed_res%>%filter(param == .x & value > 0), 
+                          family = Gamma(link = "log"))
+    anova_res <- anova(model_null, model_gamma)
+    
+    tibble(param = "NO3", estimate = estimate, low_pct = low_pct, high_pct = high_pct,
+           pct_diff = pct_diff,p_value_anova = anova_res$`Pr(>Chisq)`[2])%>%
+      mutate(p_sig_anova = ifelse(p_value_anova < 0.05, "*", ""), 
+             significant_effect = ifelse(p_value_anova < 0.05, ifelse(pct_diff > 0, "Higher in Burned", "Lower in Burned"), "No Significant Difference"))
+  }
+  df <- chem_transformed_res%>%filter(param == .x)
+  model_full <- lmer(log_value ~ burn_group + (1|site_code), data = df, REML = FALSE)
+  summary(model_full) 
+  
+  conf <- confint(model_full, parm = "beta_")
+  low_pct <- ((exp(conf[2,1])) - 1)*100
+  high_pct <- ((exp(conf[2,2])) - 1)*100
+  
+  estimate <- model_full@beta[2]
+  pct_diff <- ((exp(estimate)) - 1)*100
+  model_null <- lmer(log_value ~ 1 + (1|site_code), data = df, REML = FALSE)
+  anova_res <- anova(model_null, model_full)
+  tibble(param = .x, estimate = estimate, low_pct = low_pct, high_pct = high_pct,
+         pct_diff = pct_diff,p_value_anova = anova_res$`Pr(>Chisq)`[2])%>%
+    mutate(p_sig_anova = ifelse(p_value_anova < 0.05, "*", ""), 
+           significant_effect = ifelse(p_value_anova < 0.05, ifelse(pct_diff > 0, "Higher in Burned", "Lower in Burned"), "No Significant Difference"))
+})%>%
+  bind_rows()%>%
+  arrange(low_pct)%>%
+  filter(param == "DTN")
+
+
+#Levene's test for NO3
+lev_model <- leveneTest(log_value ~ burn_group, data = chem_transformed_res%>%filter(param == "NO3" & value > 0))
+check_model(lev_model)
+```
+
+##### Year wise (All Sites)
+
+Fixed effects: Year random effect: site
+
+```{r}
+year_wise_check <- map(c( "Turbidity", "TSS", "DTN","NH4", "K", "DOC", "NO3", "SO4"), ~{
+  if(.x == "NO3"){
+    model_gamma <- glmmTMB(value ~ Year + (1 | site_code), 
+                           data = chem_transformed_res%>%filter(param == .x & value > 0), 
+                           family = Gamma(link = "log"))
+    
+    check_model(model_gamma)
+  }else{
+    df <- chem_transformed_res%>%filter(param == .x)
+    
+    model_full <- lmer(log_value ~ Year + (1|site_code), data = df, REML = FALSE)
+    
+    check_model(model_full)
+  }
+  
+})%>% set_names(c( "Turbidity", "TSS", "DTN","NH4", "K", "DOC", "NO3", "SO4"))
+
+# If they pass the model diagnostics, extract the estimate for burn_group and calculate the percent difference between burned and unburned reservoirs. Then compare the full model to a null model without burn_group using an ANOVA to get the p-value for the effect of Year
+
+
+map(c("Turbidity", "TSS", "DTN", "NO3", "DOC", "SO4", "K"), ~{
+  
+  if(.x == "NO3"){
+    # Gamma model for NO3
+    model_gamma <- glmmTMB(value ~ Year + (1 | site_code), 
+                           data = chem_transformed_res %>% filter(param == .x & value > 0), 
+                           family = Gamma(link = "log"))
+    
+    year_means <- emmeans(model_gamma, "Year")
+    
+    # Extract estimates and confidence intervals for the contrasts
+    contrasts <- summary(pairs(year_means), infer = TRUE) %>%
+      as.data.frame() %>%
+      rename(p_value_contrast = p.value, 
+             lower.CL = asymp.LCL, 
+             upper.CL = asymp.UCL) %>%
+      mutate(parameter = .x)
+    
+    model_null <- glmmTMB(value ~ 1 + (1 | site_code), 
+                          data = chem_transformed_res %>% filter(param == .x & value > 0), 
+                          family = Gamma(link = "log"))
+    
+    anova_res <- anova(model_null, model_gamma)
+    p_anova <- anova_res$`Pr(>Chisq)`[2]
+    
+  } else {
+    # LMM for other parameters
+    df <- chem_transformed_res %>% filter(param == .x)
+    model_full <- lmer(log_value ~ Year + (1|site_code), data = df, REML = FALSE)
+    
+    year_means <- emmeans(model_full, "Year")
+    
+    # Extract estimates and confidence intervals for the contrasts
+    contrasts <- summary(pairs(year_means), infer = TRUE) %>%
+      as.data.frame() %>%
+      rename(p_value_contrast = p.value) %>%
+      mutate(parameter = .x)
+    
+    model_null <- lmer(log_value ~ 1 + (1|site_code), data = df, REML = FALSE)
+    anova_res <- anova(model_null, model_full)
+    p_anova <- anova_res$`Pr(>Chisq)`[2]
+  }
+  
+  # Attach ANOVA p-value to the contrast dataframe
+  contrasts %>%
+    mutate(p_value_anova = p_anova)
+  
+}) %>%
+  bind_rows() %>%
+  # Final calculation for percent changes and significance stars
+  mutate(
+    pct_est  = (exp(estimate) - 1) * 100,
+    pct_low  = (exp(lower.CL) - 1) * 100,
+    pct_high = (exp(upper.CL) - 1) * 100,
+    p_sig_anova = ifelse(p_value_anova < 0.05, "*", ""), 
+    p_sig_contrast = ifelse(p_value_contrast < 0.05, "*", "")
+  )%>%
+  select(parameter, contrast, pct_est, pct_low, pct_high, p_value_contrast, p_sig_contrast, p_value_anova, p_sig_anova)%>%
+  filter(parameter == "DTN")
+```
+
+##### Site wise (interacton with year)
+
+Fixed effects: Year + Site random effect: season
+
+```{r}
+
+check_model_results <- map(c(param_oi), ~{
+  df <- chem_transformed_res%>%filter(param == .x)
+  
+  model_full <- lmer(log_value ~ site_code + Year + (1|season), data = df, REML = FALSE)
+  #summary(model_full) 
+  check_model(model_full)
+  
+})%>%
+  set_names(param_oi)
+
+  map(c("NO3", "TSS", "DTN", "K", "DOC","SO4" ), ~{
+  
+  if(.x == "NO3"){
+    # Gamma model for NO3
+    model_gamma <- glmmTMB(value ~ Year + site_code + (1 | season), 
+                           data = chem_transformed_res %>% filter(param == .x & value > 0), 
+                           family = Gamma(link = "log"))
+    
+    year_means <- emmeans(model_gamma, "site_code")
+    
+    # Extract estimates and confidence intervals for the contrasts
+    contrasts <- summary(pairs(year_means), infer = TRUE) %>%
+      as.data.frame() %>%
+      rename(p_value_contrast = p.value, 
+             lower.CL = asymp.LCL, 
+             upper.CL = asymp.UCL) %>%
+      mutate(parameter = .x)
+    
+    model_null <- glmmTMB(value ~ Year + site_code  + (1 | season), 
+                          data = chem_transformed_res %>% filter(param == .x & value > 0), 
+                          family = Gamma(link = "log"))
+    
+    anova_res <- anova(model_null, model_gamma)
+    p_anova <- anova_res$`Pr(>Chisq)`[2]
+    
+  } else {
+    # LMM for other parameters
+    df <- chem_transformed_res %>% filter(param == .x)
+    model_full <- lmer(log_value  ~ Year + site_code  + (1 | season), data = df, REML = FALSE)
+    
+    year_means <- emmeans(model_full, "site_code")
+    
+    # Extract estimates and confidence intervals for the contrasts
+    contrasts <- summary(pairs(year_means), infer = TRUE) %>%
+      as.data.frame() %>%
+      rename(p_value_contrast = p.value) %>%
+      mutate(parameter = .x)
+    
+    model_null <- lmer(log_value ~ Year  + (1 | season), data = df, REML = FALSE)
+    anova_res <- anova(model_null, model_full)
+    p_anova <- anova_res$`Pr(>Chisq)`[2]
+  }
+  contrasts%>%
+    mutate(p_value_anova = anova_res$`Pr(>Chisq)`[2])
+})%>%
+  bind_rows() %>%
+  # Final calculation for percent changes and significance stars
+  mutate(
+    pct_est  = (exp(estimate) - 1) * 100,
+    pct_low  = (exp(lower.CL) - 1) * 100,
+    pct_high = (exp(upper.CL) - 1) * 100,
+    p_sig_anova = ifelse(p_value_anova < 0.05, "*", ""), 
+    p_sig_contrast = ifelse(p_value_contrast < 0.05, "*", "")
+  )%>%
+  select(parameter, contrast, pct_est, pct_low, pct_high, p_value_contrast, p_sig_contrast, p_value_anova, p_sig_anova)%>%
+    filter(parameter == "DTN")
+  
+
+```
+
+# Nutrient/ChlA response 
+
+## Plots
+
+```{r}
+#Seasonal Color values
+season_clp_color_vals <- c("Winter" = "#03045e",  "Rising Limb" = '#047E82',  "Peak Flow" = '#59B851', "Falling Limb"='#FA850E', "Fall Baseflow"  = "#772f1a")
+
+jwc_longitudinal <- tidy_chem %>%
+  dplyr::filter(!is.na(ChlA)) %>%
+  dplyr::filter(site_code %in% c("JOEI", "JOER", "CBRR", "CBRI", "CHD", "JWC"))%>%
+  select(Date,site_code, ChlA, NO3, DTN,DOC, Year,season, month,location_type)%>%
+  mutate(location_type = ifelse(location_type == "Outflow"|location_type =="Inflow", "Stream", "Reservoir"))
+
+jwc_longitudinal$site_code <- factor(jwc_longitudinal$site_code, levels = c("JOEI", "JOER", "CBRI", "CBRR", "CHD", "JWC"))
+jwc_longitudinal$season <- factor(jwc_longitudinal$season, levels = c("Winter", "Rising Limb", "Peak Flow", "Falling Limb", "Fall Baseflow"))
+jwc_longitudinal$month <- factor(jwc_longitudinal$month, levels = c("4", "5", "6", "7", "8", "9", "10","11"))
+# Calculate the medians for ChlA
+median_data <- jwc_longitudinal %>%
+  pivot_longer(cols = c(ChlA, NO3, DTN, DOC), names_to = "parameter", values_to = "value") %>%
+  group_by(site_code, Year, location_type, parameter) %>%
+  summarise(median = median(value, na.rm = TRUE))%>%
+  ungroup()%>%
+  pivot_wider(names_from = parameter, values_from = median, names_prefix = "median_") %>%
+  add_row(site_code = "JWC", Year = "2021", location_type = "Stream", median_ChlA = NA, median_NO3 = NA)
+
+median_data$site_code <- factor(median_data$site_code, levels = c("JOEI", "JOER", "CBRI", "CBRR", "CHD", "JWC"))
+
+
+jwc_long_plot <- function(param = "ChlA", dot_size = 3, b_size = 20, facet_scales = "fixed"){
+  
+  med_col_name <- paste0("median_", param)
+# Create the plot
+ggplot() + 
+  geom_point(data = jwc_longitudinal, aes(x = site_code, y = .data[[param]], color = season),
+             size = dot_size, position = position_jitterdodge(jitter.height = 0))+
+  geom_rect(data = median_data %>% filter(site_code %in% c("JOER", "CBRR")),
+            aes(xmin = as.numeric(site_code) - 0.4, xmax = as.numeric(site_code) + 0.4, ymin = - Inf, ymax = Inf, group = Year),
+            fill = "#59B851", alpha =0.2)+
+  geom_rect(data = median_data %>% filter(site_code %in% c("JWC")),
+            aes(xmin = as.numeric(site_code) - 0.4, xmax = as.numeric(site_code) + 0.4, ymin = - Inf, ymax = Inf, group = Year),
+            fill = "#002FA7", alpha =0.2)+
+  scale_color_manual(values = season_clp_color_vals)+
+  # Add lines connecting the medians
+  geom_line(data = median_data, aes(x = site_code, y = .data[[med_col_name]], group = Year), color = "black", linewidth = 1) +
+  geom_point(data = median_data, aes(x = site_code, y = .data[[med_col_name]], group = Year, shape = "Yearly Site Median"), color = "black", size = dot_size) +
+  scale_shape_manual(name = "", values = c("Yearly Site Median" = 16)) +  # 16 = solid circle
+  guides(shape = guide_legend(override.aes = list(color = "black", size = 3))) +
+  theme_bw(base_size = b_size)+
+  facet_wrap(~Year, ncol = 1, scales = facet_scales)+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "right")+
+  scale_x_discrete(labels = c( "JOEI"= "  Above\nJoe Wright", 
+                               "JOER" = "", 
+                               "CBRI" = "Above\nChambers",
+                               "CBRR" = "", 
+                               "CHD" = "Below\nChambers", 
+                               "JWC" = "Joe Wright Creek"))+
+  labs(y = chem_expressions[[param]], 
+       color = "Season")
+}
+
+jwc_long_chla <- jwc_long_plot(param = "ChlA", dot_size = 3, b_size = 20)
+jwc_long_no3 <-  jwc_long_plot(param = "NO3", dot_size = 3, b_size = 20)
+#jwc_long_dtn <-  
+  jwc_long_plot(param = "DTN", dot_size = 3, b_size = 20, facet_scales = "free_y")
+jwc_long_doc <-  jwc_long_plot(param = "DOC", dot_size = 3, b_size = 20)                               
+
+jwc_long_chla_no3<-  jwc_long_chla+jwc_long_no3+
+  plot_layout(guides = 'collect')+
+  #add color legend to top
+  plot_annotation( tag_levels = 'a')
+
+plot(jwc_long_chla_no3)
+save_plot_image(jwc_long_chla_no3 ,"jwc_long_chla_no3" )
+```
+
+
+
+-   Do reservoirs transform the nutrient signal?
+
+    -   Test of variability in ChlA/NO3 between sites
+
+        -   Levene’s test between inflow and reservoir, and reservoir
+            and outflo
+
+        -   
+
+        -   Test of means/medians between streams/reservoirs (ChlA and
+            NO3)
+
+            -   Linear mixed effect model (log_value \~ site_code +
+                season + (1\|year)
+
+-   Longitudinal Plot of ChlA + NO3
+
+## Stats
+
+```{r}
+jwc_longitudinal_stats <- jwc_longitudinal%>%
+  pivot_longer(cols = c(ChlA:NO3), 
+               names_to = "param", 
+               values_to = "value")%>%
+  mutate(log_value = log10(value + 1))
+
+```
+
+### JOER
+Test inflow vs outflow: variation and means
+
+Linear relationship between no3 & Chl-a 
+```{r}
+
+joer_longitudinal_stats<- jwc_longitudinal_stats %>%
+   filter( site_code %in% c("JOEI", "JOER", "CBRI"))
+#perform levene's test between groups
+levene_site_jwc_chla <- leveneTest(log_value ~ site_code, data = joer_longitudinal_stats%>%filter(param == "ChlA"))
+levene_site_jwc_chla
+
+levene_site_jwc_no3 <-leveneTest(log_value ~ site_code, data = joer_longitudinal_stats%>%filter(param == "NO3"))
+levene_site_jwc_no3
+```
+
+### CBRR
+Test inflow vs outflow: variation and means
+
+Linear relationship between no3 & Chl-a 
+
+```{r}
+
+```
+
+
+# Reservoir Chlorophyll a
+
+
+## Plot
+```{r}
+
 chla_dotplot_res <- build_res_dotplot(param = "ChlA", binwdth = .3, sz = 1)+
   # add medians
   stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black") +
@@ -583,109 +825,213 @@ save_plot_image(chla_dotplot_res, "res_chla_dotplots_2021_2024")
 
 ```
 
-## Longitudinal Patterns
+## Stats
 
-### JWC
+#### Eutrophic status
 
 ```{r}
-#Seasonal Color values
-season_clp_color_vals <- c("Winter" = "#03045e",  "Rising Limb" = '#047E82',  "Peak Flow" = '#59B851', "Falling Limb"='#FA850E', "Fall Baseflow"  = "#772f1a")
+# grouped by site code
+chla_status_site_year <- tidy_chem%>%
+  filter(!is.na(ChlA))%>%
+  filter(site_code %in% primary_study_res)%>%
+  group_by(site_code, Year)%>%
+  summarise(mean_chla = mean(ChlA), 
+            median_chla = median(ChlA), 
+            min_chla = min(ChlA), 
+            max_chla = max(ChlA), 
+            sd_chla = sd(ChlA))
 
 
-jwc_longitudinal <- tidy_chem %>%
-  dplyr::filter(!is.na(ChlA)) %>%
-  dplyr::filter(site_code %in% c("JOEI", "JOER", "CBRR", "CBRI", "CHD", "JWC"))%>%
-  select(Date,site_code, ChlA, NO3, Year,season, month,location_type)%>%
-  mutate(location_type = ifelse(location_type == "Outflow"|location_type =="Inflow", "Stream", "Reservoir"))
+# Grouped by burn status
 
-jwc_longitudinal$site_code <- factor(jwc_longitudinal$site_code, levels = c("JOEI", "JOER", "CBRI", "CBRR", "CHD", "JWC"))
-jwc_longitudinal$season <- factor(jwc_longitudinal$season, levels = c("Winter", "Rising Limb", "Peak Flow", "Falling Limb", "Fall Baseflow"))
-jwc_longitudinal$month <- factor(jwc_longitudinal$month, levels = c("4", "5", "6", "7", "8", "9", "10","11"))
-# Calculate the medians for ChlA
-median_data <- jwc_longitudinal %>%
-  group_by(site_code, Year, location_type) %>%
-  summarise(median_ChlA = median(ChlA, na.rm = TRUE), 
-            median_NO3 = median(NO3, na.rm = TRUE), 
-            max_ChlA = max(ChlA, na.rm = T), 
-            max_NO3 = max(NO3, na.rm = T)) %>%
+chla_status_site_year <- tidy_chem%>%
+  filter(!is.na(ChlA))%>%
+  filter(site_code %in% primary_study_res)%>%
+  group_by(site_code, Year, burn_group)%>%
+  summarise(mean_chla = mean(ChlA), 
+            median_chla = median(ChlA), 
+            min_chla = min(ChlA), 
+            max_chla = max(ChlA), 
+            sd_chla = sd(ChlA))
+
+#create flextable for these stats
+chla_status_site_year <- chla_status_site_year%>%
   ungroup()%>%
-  add_row(site_code = "JWC", Year = "2021", location_type = "Stream", median_ChlA = NA, median_NO3 = NA, max_ChlA = NA, max_NO3 = NA)
-median_data$site_code <- factor(median_data$site_code, levels = c("JOEI", "JOER", "CBRI", "CBRR", "CHD", "JWC"))
-
-# Create the plot
-jwc_long_chla<-  ggplot() + 
-  geom_point(data = jwc_longitudinal, aes(x = site_code, y = ChlA, color = season),
-             size = 3 ,position = position_jitterdodge(jitter.height = 0))+
-  geom_rect(data = median_data %>% filter(site_code %in% c("JOER", "CBRR")),
-            aes(xmin = as.numeric(site_code) - 0.4, xmax = as.numeric(site_code) + 0.4, ymin = - Inf, ymax = Inf, group = Year),
-            fill = "#59B851", alpha =0.2)+
-  geom_rect(data = median_data %>% filter(site_code %in% c("JWC")),
-            aes(xmin = as.numeric(site_code) - 0.4, xmax = as.numeric(site_code) + 0.4, ymin = - Inf, ymax = Inf, group = Year),
-            fill = "#002FA7", alpha =0.2)+
-  scale_color_manual(values = season_clp_color_vals)+
-  # Add lines connecting the medians
-  geom_line(data = median_data, aes(x = site_code, y = median_ChlA, group = Year), color = "black", linewidth = 1) +
-  geom_point(data = median_data, aes(x = site_code, y = median_ChlA, group = Year, shape = "Yearly Site Median"), color = "black", size = 3) +
-  scale_shape_manual(name = "", values = c("Yearly Site Median" = 16)) +  # 16 = solid circle
-  guides(shape = guide_legend(override.aes = list(color = "black", size = 3))) +
-  theme_bw(base_size = 20)+
-  facet_wrap(~Year, ncol = 1, scale = "free_y")+
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "right")+
-  scale_x_discrete(labels = c( "JOEI"= "  Above\nJoe Wright", 
-                               "JOER" = "", 
-                               "CBRI" = "Above\nChambers",
-                               "CBRR" = "", 
-                               "CHD" = "Below\nChambers", 
-                               "JWC" = "Joe Wright Creek"))+
-  labs(y = expression(Chlorophyll ~italic("a") ~ (ug ~ L^{-1})), 
-       color = "Season")
-
-
-
-jwc_long_no3 <- 
-  ggplot() + 
-  geom_point(data = jwc_longitudinal, aes(x = site_code, y = NO3, color = season),size = 3 ,position = position_jitterdodge(jitter.height = 0))+
-  geom_rect(data = median_data %>% filter(site_code %in% c("JOER", "CBRR")),
-            aes(xmin = as.numeric(site_code) - 0.4, xmax = as.numeric(site_code) + 0.4, ymin = - Inf, ymax = Inf, group = Year),
-            fill = "#59B851", alpha =0.2)+
-  geom_rect(data = median_data %>% filter(site_code %in% c("JWC")),
-            aes(xmin = as.numeric(site_code) - 0.4, xmax = as.numeric(site_code) + 0.4, ymin = - Inf, ymax = Inf, group = Year),
-            fill = "#002FA7", alpha =0.2)+
-  scale_color_manual(values = season_clp_color_vals)+
-  #add a Hline for the median
-  #stat_summary(fun = median, geom = "crossbar", position = position_dodge(width = 0.8), width = 0.8, fill = "black") +
-  geom_line(data = median_data, aes(x = site_code, y = median_NO3, group = Year), color = "black", linewidth = 1) +
-  geom_point(data = median_data, aes(x = site_code, y = median_NO3, group = Year, shape = "Yearly Site Median"), color = "black", size = 3) +
-  scale_shape_manual(name = "", values = c("Yearly Site Median" = 16)) +  # 16 = solid circle
-  guides(shape = guide_legend(override.aes = list(color = "black", size = 3))) +
-  theme_bw(base_size = 20)+
-  facet_wrap(~Year, ncol = 1, scale = "free_y")+
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        #remove facet title
-        #strip.text.x = element_blank(),
-        legend.position = "none") +
-  scale_x_discrete(labels = c( "JOEI"= "  Above\nJoe Wright", 
-                               "JOER" = "", 
-                               "CBRI" = "Above\nChambers",
-                               "CBRR" = "", 
-                               "CHD" = "Below\nChambers", 
-                               "JWC" = "Joe Wright Creek")) +
-  labs(y = expression(NO[3]^{"-"} ~ (mg ~ L^{-1})))
-
-
-jwc_long_chla_no3<-  jwc_long_chla+jwc_long_no3+
-  plot_layout(guides = 'collect')+
-  #add color legend to top
-  plot_annotation( tag_levels = 'a')
-
-plot(jwc_long_chla_no3)
-save_plot_image(jwc_long_chla_no3 ,"jwc_long_chla_no3" )
+  mutate(burn_group = factor(burn_group, levels = c("Pre", "Post")))%>%
+  mutate(Year = as.character(Year))%>%
+  select(-site_code)%>%
+  pivot_longer(cols = c(mean_chla, median_chla, min_chla, max_chla, sd_chla), names_to = "statistic", values_to = "value")%>%
+  mutate(statistic = factor(statistic, levels = c("mean_chla", "median_chla", "min_chla", "max_chla", "sd_chla")))
 ```
 
-### South Fork
+
+### Prep Data
+
+```{r}
+
+chem_transformed_res <- tidy_chem%>%
+    filter(site_code %in% primary_study_res) %>%
+  pivot_longer(cols = c(ChlA,Turbidity, TSS, DTN,  DOC:NO3, SO4), 
+               names_to = "param", 
+               values_to = "value")%>%
+  select(site_code, Date, Year, param, value, burn_group,season)%>%
+    mutate(burn_group = factor(burn_group, levels = c("unburned", "burned")),
+           Year = factor(Year, levels = c("2021", "2022", "2023", "2024")), 
+           season = factor(season),
+           site_code = factor(site_code, levels = c("LNGR", "JOER", "CBRR", "PTRR", "BRNR")))%>%
+  mutate(log_value = log10(value +1 ))%>%
+  na.omit()
+
+param_oi <- c("ChlA")
+
+ggplot(chem_transformed_res%>%filter(param %in% param_oi), aes(x = value, fill = burn_group))+
+  geom_histogram()+
+  facet_wrap(~param, scales = "free")
+
+ggplot(chem_transformed_res%>%filter(param %in% param_oi), aes(x = log_value, fill = burn_group))+
+  geom_histogram()+
+  facet_wrap(~param, scales = "free")
+
+```
+
+Nothing without transformation is normal, we should double check model
+assumptions with `check_model()` after creating a model then only
+evaluate those that do. We will want to use a linear mixed effects model
+to compare out burned vs unburned reservoirs
+
+##### Burned vs Unburned
+
+Fixed effects: burn type random effect: site
+
+```{r}
+map(c("ChlA"), ~{
+   df <- chem_transformed_res%>%filter(param == .x)
+   
+#    outliers_list <- check_outliers(df$log_value, method = "zscore", threshold = 3)
+#    
+# df <- df %>% mutate(outlier = outliers_list)%>%
+#   filter(outlier == FALSE)
+
+   model_full <- lmer(log_value ~ burn_group + (1|site_code), data = df, REML = FALSE)
+
+    plot(check_model(model_full))+
+     plot_annotation(title = .x)
+
+})
+
+# If they pass the model diagnostics, extract the estimate for burn_group and calculate the percent difference between burned and unburned reservoirs. Then compare the full model to a null model without burn_group using an ANOVA to get the p-value for the effect of burn_group.
+
+
+map(c("ChlA"), ~{
+  df <- chem_transformed_res%>%filter(param == .x)
+  model_full <- lmer(log_value ~ burn_group + (1|site_code), data = df, REML = FALSE)
+  summary(model_full) 
+  
+  conf <- confint(model_full, parm = "beta_")
+  low_pct <- ((exp(conf[2,1])) - 1)*100
+  high_pct <- ((exp(conf[2,2])) - 1)*100
+  
+  estimate <- model_full@beta[2]
+  pct_diff <- ((exp(estimate)) - 1)*100
+  model_null <- lmer(log_value ~ 1 + (1|site_code), data = df, REML = FALSE)
+  anova_res <- anova(model_null, model_full)
+  tibble(param = .x, estimate = estimate, low_pct = low_pct, high_pct = high_pct,
+         pct_diff = pct_diff, p_value = anova_res$`Pr(>Chisq)`[2])%>%
+    mutate(p_sig = ifelse(p_value < 0.05, "*", ""))
+})%>%
+  bind_rows()
+
+
+```
+
+##### Year wise (All Sites)
+
+Fixed effects: Year random effect: site
+
+```{r}
+map(c("ChlA"), ~{
+   df <- chem_transformed_res%>%filter(param == .x)
+
+   model_full <- lmer(log_value ~ Year + (1|site_code), data = df, REML = FALSE)
+
+    plot(check_model(model_full))+
+     plot_annotation(title = .x)
+
+})
+
+# If they pass the model diagnostics, extract the estimate for burn_group and calculate the percent difference between burned and unburned reservoirs. Then compare the full model to a null model without burn_group using an ANOVA to get the p-value for the effect of Year
+
+
+map(c("ChlA"), ~{
+  df <- chem_transformed_res%>%filter(param == .x)
+  model_full <- lmer(log_value ~ Year + (1|site_code), data = df, REML = FALSE)
+  summary(model_full) 
+  year_means <- emmeans(model_full, "Year")
+  
+  contrasts <- pairs(year_means, combine = TRUE) %>%
+  as.data.frame()%>%
+  mutate(parameter = .x)
+  # 
+  # conf <- confint(model_full, parm = "beta_")
+  # low_pct <- ((exp(conf[2,1])) - 1)*100
+  # high_pct <- ((exp(conf[2,2])) - 1)*100
+  # 
+  # estimate <- model_full@beta[2]
+  # pct_diff <- ((exp(estimate)) - 1)*100
+  model_null <- lmer(log_value ~ 1 + (1|site_code), data = df, REML = FALSE)
+  anova_res <- anova(model_null, model_full)
+  
+  contrasts%>%
+    mutate(p_value = anova_res$`Pr(>Chisq)`[2], 
+           p_sig = ifelse(p_value < 0.05, "*", ""))
+})%>%
+  bind_rows()
+
+```
+
+##### Site wise (interacton with year)
+
+Fixed effects: Year + Site random effect: season
+
+```{r}
+
+check_model_results <- map(c(param_oi), ~{
+  df <- chem_transformed_res%>%filter(param == .x)
+  
+  model_full <- lmer(log_value ~ site_code + Year + (1|season), data = df, REML = FALSE)
+  #summary(model_full) 
+  check_model(model_full)
+  
+})%>%
+  set_names(param_oi)
+
+  map(c("ChlA" ), ~{
+  df <- chem_transformed_res%>%filter(param == .x)
+  model_full <- lmer(log_value ~ site_code + Year + (1|season), data = df, REML = FALSE)
+  summary(model_full) 
+  
+  site_means <- emmeans(model_full, "site_code")
+  
+  contrasts <- pairs(site_means, combine = TRUE) %>%
+  as.data.frame()%>%
+  mutate(parameter = .x, 
+         p_sig_contrast = ifelse(p.value < 0.05, "*", ""), 
+         pct_diff = ((exp(estimate)) - 1)*100)%>%
+    select(parameter, contrast, estimate, pct_diff, p.value, p_sig_contrast)
+
+  model_null <- lmer(log_value ~ 1 + (1|site_code), data = df, REML = FALSE)
+  anova_res <- anova(model_null, model_full)
+  
+  contrasts%>%
+    mutate(p_sig_anova = ifelse(anova_res$`Pr(>Chisq)`[2] < 0.05, "*", ""))
+})%>%
+  bind_rows()
+```
+
+
+# South Fork
+
+## Plots
 
 ```{r}
 
@@ -707,7 +1053,7 @@ sf_chem<- filter(tidy_chem, site_code %in% SF_Res & !is.na(ChlA))%>%
       Year %in% c(2021, 2022) ~ "Reservoirs NOT Filled",
       Year  %in% c(2023, 2024) ~ "Reservoirs Filled"
       
-    ))
+    )) 
 
 sf_chem$location_type <- factor(sf_chem$location_type, levels = c("Inflow","Reservoir", "Outflow","Beaver Creek","South Fork", "Poudre Below\nSouth Fork"))
 sf_chem$filled_status <- factor(sf_chem$filled_status, levels = c("Reservoirs NOT Filled", "Reservoirs Filled"))
@@ -718,11 +1064,11 @@ lab_w_units <-  filter(chem_units, simple %in% "ChlA")%>%
 #plot
 south_fork <-   ggplot(sf_chem, aes(x=location_type,y=ChlA,  fill = filled_status, shape = )) + 
   geom_dotplot( binaxis = "y", 
-               method = "histodot",
-               stackdir = "center", 
-               position = position_dodge(width = 0.8),
-               binwidth = .2, dotsize = 2, 
-               stackratio = 1, width = .01)+
+                method = "histodot",
+                stackdir = "center", 
+                position = position_dodge(width = 0.8),
+                binwidth = .2, dotsize = 2, 
+                stackratio = 1, width = .01)+
   geom_abline(aes(slope=0, intercept=2.6), color='black', linetype="dashed") +
   geom_abline(aes(slope=0, intercept=8), color='black', linetype="dashed") +
   annotate(geom="text", label= "Mesotrophic", x=.75, y=2.6, vjust= -1, size = 6)+
@@ -740,10 +1086,45 @@ south_fork
 
 save_plot_image(south_fork ,"south_fork_chla_impact" )
 ```
+## Stats
 
-### Mainstem
+```{r}
+sf_chem <- tidy_chem %>%
+  filter(site_code %in% c("COMI", "HORI", "COMR", "HORR", "COMO", "HORO", "BEAV", "SFM"))%>%
+  pivot_longer(cols = c(ChlA,Turbidity, TSS, DTN,  DOC:NO3, SO4, PO4), 
+               names_to = "param", 
+               values_to = "value")%>%
+  mutate(year_site = paste0(Year, "_", site_code))%>%
+  mutate(log_value = log10(value + 1), 
+         fill_status = if_else(Year <= 2022, "Unfilled", "Filled"))%>%
+  mutate(log_value = log10(value + 1))%>%
+  na.omit()
 
-## CLP
+ggplot(sf_chem, aes(x = value, color = year_site))+
+  geom_histogram()+
+  facet_wrap(~param, scales = "free")
+```
+
+### Inflows vs Beaver 
+Do we see a similar impact to the JWC network? ie increase across the basin
+
+```{r}
+
+```
+
+### Downstream sites (filled vs unfilled)
+
+When a reservoir is active, do downstream sites have increased chl-a and if so, how far is that impact "felt"?
+
+```{r}
+
+```
+
+
+# CLP Longitudinal
+Show how reservoir impact dies as additional tributaries dilute the signal. We can also show how the reservoirs impact changes across seasons (minimal). 
+
+## Plot
 
 ```{r}
 
@@ -831,9 +1212,20 @@ save_plot_image(clp_long_chla, "clp_long_chla")
 
 ```
 
+## Stats
+Compare site chla variability with levene test and means using mixed model 
+Fixed: Site
+Random: Season + Year
+
+Calculate the metric of reservoir impact: acre ft impounded water storage/ watershed area 
+Does this correlate with Chl-a across the basin?
+
+
+# Scratch
+
 # Remote Sensing
 
-## Check out Temp
+## Import datasets and join with chem data
 
 ```{r}
 #Read in the data from B
@@ -848,8 +1240,12 @@ temp_rs <- read_parquet(here("data/derived/remote_sensing/landsat/CLP_temp_estim
          doy_check = if_else(doy >= 120 & doy <= 300, "PASS", "FAIL"), # Filter for sampling season (roughly April to October)
   kurtosis_check = if_else(kurt_SurfaceTemp > 10, "FAIL", "PASS"), #filter out for instances with high kurtosis
   sd_check = if_else(sd_SurfaceTemp > 2, "FAIL", "PASS"), #filter out instances with high SD
-pass_all = (sd_check == "PASS" & kurtosis_check == "PASS" & doy_check == "PASS"),
-site_code = case_when(
+pass_all = (sd_check == "PASS" & kurtosis_check == "PASS" & doy_check == "PASS"))
+
+all_rs <- temp_rs %>%
+  left_join(read_parquet("data/derived/remote_sensing/landsat/CLP_SDD_estimate_v2024-10-10.parquet"), by = c("gnis_name", "date"))%>%
+  mutate(
+    site_code = case_when(
     gnis_name == "Seaman Reservoir"     ~ "SEMR",    
     gnis_name =="Joe Wright Reservoir"    ~ "JOER", 
     gnis_name == "Barnes Meadow Reservoir"  ~ "BRNR",
@@ -859,182 +1255,53 @@ site_code = case_when(
 gnis_name =="Hourglass Reservoir"   ~ "HORR",
 gnis_name ==  "Comanche Reservoir"     ~ "COMR",
 gnis_name == "Halligan Reservoir"  ~ "HALL",
-    TRUE ~ NA_character_))%>%
-  filter(pass_all == TRUE & med_surface_C > 0)
-
-ggplot(temp_rs, aes(x = date, y = med_surface_C, color = doy, shape = pass_all))+
-  geom_point()+
-  geom_vline(xintercept = as.Date(c("2020-08-01")), linetype = "dashed", color = "red") +
-  facet_wrap(~gnis_name,
-             scales = "free_y",
-             ncol = 1) +
-  theme_bw() +
-  labs(x = "Date", y = "Estimated Temperature (°C)", shape = "PASS QA")
-
-#sd_SufraceTemp, min_SurfaceTemp, kurt_SurfaceTemp
-#check out distributions for each of these
-ggplot(temp_rs, aes(x = yday(date), y = as.numeric(kurt_SurfaceTemp)))+
-  geom_point()+
-  #geom_vline(xintercept = as.Date(c("2020-08-01")), linetype = "dashed", color = "red") +
-  facet_wrap(~gnis_name) +
-  theme_bw() +
-  labs(x = "Date", y = "Kurtosis")
-
-ggplot(temp_rs, aes(x = date, y = as.numeric(min_SurfaceTemp)-273.15 ))+
-  geom_point()+
-  geom_vline(xintercept = as.Date(c("2020-08-01")), linetype = "dashed", color = "red") +
-  facet_wrap(~gnis_name) +
-  theme_bw() +
-  labs(x = "Date", y = "Min Surface Temperature (°C)")
-
-
-ggplot(temp_rs, aes(x = date, y = as.numeric(sd_SurfaceTemp)))+
-  geom_point()+
-  geom_vline(xintercept = as.Date(c("2020-08-01")), linetype = "dashed", color = "red") +
-  facet_wrap(~gnis_name) +
-  theme_bw() +
-  labs(x = "Date", y = "SD Surface Temperature (°K)")
-
-ggplot(temp_rs, aes(x = as.numeric(sd_SurfaceTemp), color = as_factor(year(date))))+
-  geom_histogram()+
-  facet_wrap(~gnis_name) +
-  theme_bw() +
-  labs(x= "SD Surface Temperature (°K)")
-
-
-ggplot(temp_rs, aes(x = as.numeric(min_SurfaceTemp) - 273.15, y = as.numeric(med_SurfaceTemp_corr)-273.15))+
-  geom_point()+
-  geom_abline(aes(slope=1, intercept=0), color = "black", linetype = "dashed")+
-  #geom_vline(xintercept = as.Date(c("2020-08-01")), linetype = "dashed", color = "red") +
-  facet_wrap(~gnis_name) +
-  theme_bw() +
-  labs(x = "Min Surface Temp (°C)", y = "Med Surface Temperature (°C)")
+    TRUE ~ NA_character_))
 
 ```
 
-
-### Seasonal Trend Plots
+## Seasonal Trends in Temperatures
 
 ```{r}
-formatData = function(lake){
-  lakeData <- temp_rs %>% 
-    filter(site_code == lake)
-  as_tibble(lakeData)
-}
 
-calcSeasonAdjTrends = function(lakeTibble){
-  lakeTibble %>% 
-    time_decompose(med_surface_C, merge = T) 
-}
-
-graphTrendObs = function(seasonAdjTrends) {
+graphTrendObs_temp = function(lake) {
+  seasonAdjTrends <- all_rs %>% 
+    mutate(doy = yday(date))%>%
+    filter(site_code == lake & !is.na(med_surface_C) & (doy >= 120 & doy <= 300))%>%
+    select(gnis_name, date, med_surface_C)%>%
+    as_tibble()%>% 
+    time_decompose(med_surface_C, merge = T)
+  
   lakeName = seasonAdjTrends$gnis_name[1]
   ggplot(seasonAdjTrends, aes(x = date, y = observed)) +
     geom_point(color = 'gray') +
     geom_vline(xintercept = as.Date(c("2020-08-01")), linetype = "dashed", color = "red") +
     labs(x = NULL, 
-         y = NULL,
+         y = "Estimated lake surface temperature (C)",
          title = paste0(lakeName)) +
     geom_point(aes(y = trend), color = '#E69F00') +
     geom_smooth(aes(y = trend), lty = 2) +
     theme_bw() +
-    theme(plot.title = element_text(face = 'bold', hjust = 0.5, size = 12))
+    theme(plot.title = element_text(face = 'bold', hjust = 0.5, size = 12))+
+    ylim(0,30)
 }
 
-burned_plots <- map(c("BRNR", "PTRR", "CBRR"),~
-formatData(.x)%>%
- calcSeasonAdjTrends(.)%>%
-graphTrendObs(.))
+temp_plots <- map(c("BRNR", "PTRR", "CBRR","JOER", "LNGR"),~graphTrendObs_temp(.x))
 
-wrap_plots(burned_plots, ncol = 1)
-
-unburned_plots <- map(c("JOER", "LNGR"),~
-formatData(.x)%>%
- calcSeasonAdjTrends(.)%>%
-graphTrendObs(.))
-
-wrap_plots(unburned_plots, ncol = 1)
+wrap_plots(temp_plots, ncol = 1)+ plot_layout(axes = "collect")
 
 ```
-
-
-## Join Temp with Grabs
+## Seasonal Trends in SDD
 
 ```{r}
 
-temp_rs_joined <- temp_rs %>%
-  select(gnis_name,rs_date = date, med_surface_C) %>%
-  mutate(site_code = case_when(
-    gnis_name == "Seaman Reservoir"     ~ "SEMR",    
-    gnis_name =="Joe Wright Reservoir"    ~ "JOER", 
-    gnis_name == "Barnes Meadow Reservoir"  ~ "BRNR",
-    gnis_name == "Chambers Lake" ~ "CBRR",
-    gnis_name == "Peterson Lake"     ~ "PTRR", 
-    gnis_name ==     "Long Draw Reservoir"    ~ "LNGR",
-gnis_name =="Hourglass Reservoir"   ~ "HORR",
-gnis_name ==  "Comanche Reservoir"     ~ "COMR",
-gnis_name == "Halligan Reservoir"  ~ "HALL",
-    TRUE ~ NA_character_),
-date_low = rs_date - days(4),
-    date_high = rs_date + days(4)) %>%
-  left_join(tidy_chem, 
-            by = join_by(site_code, between(y$Date, x$date_low, x$date_high)))%>%
-  filter(!is.na(ChlA)& !is.na(med_surface_C))%>%
-  mutate(date_diff = abs(as.numeric(difftime(Date, rs_date, units = "days"))))%>%
-  filter(!(site_code %in% c("COMR", "HORR") & Year %in% c(2021,2022))) # removing unfilled comanche and hourglass matchups
-
-ggplot(temp_rs_joined, aes(x = med_surface_C, y = ChlA,shape = Year))+
-  geom_point()+
-  facet_wrap(~site_code)+
-  theme_bw()+
-  labs(x = "Estimated Surface Temperature (°C)", y = "Chlorophyll a (µg/L)")
-
-```
-
-Not great associations and there is only ~100 matchups between the seven reservoirs
-
-## Check out SDD
-
-```{r}
-
-sdd_rs <- read_parquet("data/derived/remote_sensing/landsat/CLP_SDD_estimate_v2024-10-10.parquet")%>%
-  mutate(doy = yday(date),
-         site_code = case_when(
-           gnis_name == "Seaman Reservoir"     ~ "SEMR",    
-           gnis_name =="Joe Wright Reservoir"    ~ "JOER", 
-           gnis_name == "Barnes Meadow Reservoir"  ~ "BRNR",
-           gnis_name == "Chambers Lake" ~ "CBRR",
-           gnis_name == "Peterson Lake"     ~ "PTRR", 
-           gnis_name ==     "Long Draw Reservoir"    ~ "LNGR",
-           gnis_name =="Hourglass Reservoir"   ~ "HORR",
-           gnis_name ==  "Comanche Reservoir"     ~ "COMR",
-           gnis_name == "Halligan Reservoir"  ~ "HALL",
-           TRUE ~ NA_character_))%>%
-  filter(doy >= 130 & doy <= 310)# Filter for sampling season (roughly April to October)
-
-ggplot(sdd_rs, aes(x = date, y = mean_sdd))+
-  geom_point()+
-  geom_vline(xintercept = as.Date(c("2020-08-01")), linetype = "dashed", color = "red") +
-  facet_wrap(~gnis_name, ncol = 1)+
-  theme_bw()+
-  labs(x = "Date", y = "Estimated SDD (m)")
-```
-
-### Seasonal Trend Plots
-
-```{r}
-formatData = function(lake){
-  lakeData <- sdd_rs %>% 
-    filter(site_code == lake)
-  as_tibble(lakeData)
-}
-
-calcSeasonAdjTrends = function(lakeTibble){
-  lakeTibble %>% 
+graphTrendObs_SDD = function(lake) {
+    seasonAdjTrends <- all_rs %>% 
+    mutate(doy = yday(date))%>%
+    filter(site_code == lake & !is.na(mean_sdd) & (doy >= 120 & doy <= 300))%>%
+    select(gnis_name, date, mean_sdd)%>%
+    as_tibble() %>% 
     time_decompose(mean_sdd, merge = T) 
-}
-
-graphTrendObs = function(seasonAdjTrends) {
+    
   lakeName = seasonAdjTrends$gnis_name[1]
   ggplot(seasonAdjTrends, aes(x = date, y = observed)) +
     geom_point(color = 'gray') +
@@ -1045,591 +1312,84 @@ graphTrendObs = function(seasonAdjTrends) {
     geom_point(aes(y = trend), color = '#E69F00') +
     geom_smooth(aes(y = trend), lty = 2) +
     theme_bw() +
-    theme(plot.title = element_text(face = 'bold', hjust = 0.5, size = 12))
+    theme(plot.title = element_text(face = 'bold', hjust = 0.5, size = 12))+
+    ylim(0,6)
 }
 
-map(c("BRNR", "PTRR", "CBRR","JOER", "LNGR"),~
-formatData(.x)%>%
- calcSeasonAdjTrends(.)%>%
-graphTrendObs(.))%>%
-wrap_plots(., ncol = 1, axes = "collect")
+sdd_plots <- map(c("BRNR", "PTRR", "CBRR","JOER", "LNGR"),~graphTrendObs_SDD(.x))
+
+wrap_plots(sdd_plots, ncol = 1, axes = "collect")
 
 
 ```
 
-## Join with chem
+## RS vs grabs
+
 ```{r}
-sdd_rs_joined <- sdd_rs %>%
-  select(gnis_name,rs_date = date, mean_sdd, pred1, pred2, pred3, pred4) %>%
-  mutate(site_code = case_when(
-    gnis_name == "Seaman Reservoir"     ~ "SEMR",    
-    gnis_name =="Joe Wright Reservoir"    ~ "JOER", 
-    gnis_name == "Barnes Meadow Reservoir"  ~ "BRNR",
-    gnis_name == "Chambers Lake" ~ "CBRR",
-    gnis_name == "Peterson Lake"     ~ "PTRR", 
-    gnis_name ==     "Long Draw Reservoir"    ~ "LNGR",
-gnis_name =="Hourglass Reservoir"   ~ "HORR",
-gnis_name ==  "Comanche Reservoir"     ~ "COMR",
-gnis_name == "Halligan Reservoir"  ~ "HALL",
-    TRUE ~ NA_character_),
-date_low = rs_date - days(4),
-    date_high = rs_date + days(4)) %>%
+chem_rs <- all_rs%>%
+  rename(rs_date = date)%>%
+  mutate(date_low = rs_date - days(3),
+    date_high = rs_date + days(3)) %>%
   left_join(tidy_chem, 
             by = join_by(site_code, between(y$Date, x$date_low, x$date_high)))%>%
-  filter(!is.na(ChlA) & !is.na(mean_sdd))%>%
-  mutate(date_diff = abs(as.numeric(difftime(Date, rs_date, units = "days"))))
+  filter(!is.na(med_surface_C))%>%
+  mutate(date_diff = abs(as.numeric(difftime(Date, rs_date, units = "days"))))%>%
+  filter(!(site_code %in% c("COMR", "HORR") & Year %in% c(2021,2022)))%>% # removing unfilled comanche and hourglass matchups
+  select(rs_date,sample_date = Date, date_diff, site_code, gnis_name, med_surface_C, mean_sdd, ChlA, Turbidity, TSS, NO3, DTN, DOC, Year)
+```
 
-ggplot(sdd_rs_joined, aes(x = mean_sdd, y = ChlA, shape = Year))+
+
+
+Not great associations and there is only \~120 matchups between the seven reservoirs
+
+```{r}
+ggplot(chem_rs%>%filter(!is.na(ChlA)), aes(x = med_surface_C, y = ChlA,shape = Year))+
   geom_point()+
   facet_wrap(~site_code)+
   theme_bw()+
-  labs(x = "Estimated Secchi Disk Depth (M)", y = "Chlorophyll a (µg/L)")
+  labs(x = "Estimated Surface Temperature (°C)", y = "Sample Chlorophyll a (µg/L)")
 
-ggplot(sdd_rs_joined%>%filter(TSS <200), aes(x = mean_sdd, y = TSS, color = site_code, shape = Year))+
-  geom_point(size = 3)+
-  scale_y_log10()+
-  #facet_wrap(~site_code)+
+
+ggplot(chem_rs%>%filter(!is.na(ChlA)), aes(x = mean_sdd, y = TSS, shape = Year))+
+  geom_point()+
+  facet_wrap(~site_code)+
   theme_bw()+
-  labs(x = "Estimated Secchi Disk Depth (M)", y = "TSS (mg/L)")
-```
+  labs(x = "Estimated Mean Secchi Disk Depth (m)", y = "Sample TSS (mg/L)")
 
+ggplot(chem_rs%>%filter(!is.na(ChlA)), aes(x = mean_sdd, y = Turbidity, shape = Year))+
+  geom_point()+
+  facet_wrap(~site_code)+
+  theme_bw()+
+  labs(x = "Estimated Mean Secchi Disk Depth (m)", y = "Sample Turbidity (NTU)")
 
+ggplot(chem_rs%>%filter(!is.na(ChlA)), aes(x = mean_sdd, y = ChlA,shape = Year))+
+  geom_point()+
+  facet_wrap(~site_code)+
+  theme_bw()+
+  labs(x = "Estimated Mean Secchi Disk Depth (m)", y = "Sample Chlorophyll a (µg/L)")
 
-
-# Stats Section
-
-### Sample Counts
-
-```{r}
-tidy_chem%>%
-  mutate(loc_type = case_when(
-    location_type %in% c("Inflow", "Reservoir", "Outflow") ~ "Reservoir Network", 
-    site_code == "BEAV" & !is.na(ChlA) ~ "Reservoir Network",
-    location_type == "Mainstem" ~ "Mainstem",
-    TRUE ~ "Stream"))%>%
-  group_by(loc_type)%>%
-  summarise(sample_count = n(), 
-            chla_samp = sum(!is.na(ChlA)))%>%
-  #add a row of total minus stream
-  add_row(loc_type = "Total minus Stream", sample_count = sum(.$sample_count) - .$sample_count[.$loc_type == "Stream"], chla_samp = sum(.$chla_samp) - .$chla_samp[.$loc_type == "Stream"])
-
-
-tidy_chem%>%
-  group_by(location_type)%>%
-  summarise(sample_count = n(), 
-            chla_samp = sum(!is.na(ChlA)))
-```
-
-# Evaluating differences
-
-## Reservoirs only
-
-### Check to see if they are normally distributed (Shapiro-Wilk test)
-
-```{r}
-chem_transformed_res <- tidy_chem%>%
-    filter(site_code %in% mainstem_Res_only) %>%
-  pivot_longer(cols = c(ChlA,Turbidity, TSS, DTN,  DOC:NO3, SO4), 
-               names_to = "param", 
-               values_to = "value")%>%
-  select(site_code, Date, Year, param, value, burn_group, burn_year)%>%
-  mutate(year_site = paste0(Year, "_", site_code))%>%
-  mutate(log_value = log10(value + 1))%>%
-  na.omit()
-
-ggplot(chem_transformed_res, aes(x = value, color = year_site))+
-  geom_histogram()+
-  facet_wrap(~param, scales = "free")
- 
-chem_transformed_res %>%
-  group_by(param) %>%
-  shapiro_test(value)%>%
-  filter(p > 0.05)
-
-chem_transformed_res %>%
-  group_by(param) %>%
-  shapiro_test(log_value)%>%
-  arrange(p)
-#
-```
-Nothing without transformation is normal and only Ca is normal post log transform. We will need to use Welch's Anova test to compare between burned and unburned reservoirs and we will use the log transformed data for that test since it is closer to normal.
-
-## Do parameters vary full period between burned and unburned reservoirs?
-
-```{r}
-#Welch ANOVA test which does not assume equal variances (which is typically not the case)
-kruskal_res_results <- chem_transformed_res %>%
-  mutate(burn_group = factor(burn_group, levels = c("unburned", "burned"))) %>%
-  group_by(param) %>%
-  group_modify(~{
-      res <- .x %>% kruskal_test(value ~ burn_group)
-      res$test_used <- "kruskal_test"
-      return(as_tibble(res))
-  })%>%
-  mutate(p.sig = ifelse(p < 0.05,"*" , ""))
-kruskal_res_results
-
-# Post-Hoc: Games-Howell
-# Games-Howell works for both equal and unequal variances.
-post_hoc_results <- chem_transformed_res %>%
-  #only do post-hoc for significant results from final results
-  filter(param %in% welch_res_results$param[welch_res_results$p.sig == "*"]) %>%
-  mutate(burn_group = factor(burn_group, levels = c("unburned", "burned"))) %>%
-  group_by(param) %>%
-  games_howell_test(log_value ~ burn_group)%>%
-  mutate(
-      pct_change = (10^estimate - 1) * 100,
-      pct_conf_low = (10^conf.low - 1) * 100,
-      pct_conf_high = (10^conf.high - 1) * 100
-    ) %>%
-    # Rounding for readability
-    mutate(across(c(pct_change, pct_conf_low, pct_conf_high), ~round(., 2)))
-
-post_hoc_results
-```
-
-## Do parameters vary between burned and unburned reservoirs (year by year)?
-
-```{r}
-#Welch ANOVA test which does not assume equal variances (which is typically not the case)
-welch_res_results <- chem_transformed_res %>%
-  group_by(param) %>%
-  group_modify(~{
-      res <- .x %>% welch_anova_test(log_value ~ burn_year)
-      res$test_used <- "Welch ANOVA"
-      return(as_tibble(res))
-  })%>%
-  mutate(p.sig = ifelse(p < 0.05,"*" , ""))%>%
-  select(param, DFd,p, test_used, p.sig)
-welch_res_results
-
-# Post-Hoc: Games-Howell
-# Games-Howell works for both equal and unequal variances.
-post_hoc_results <- chem_transformed_res %>%
-  #only do post-hoc for significant results from final results
-  filter(param %in% welch_res_results$param[welch_res_results$p.sig == "*"]) %>%
-  group_by(param) %>%
-  games_howell_test(log_value ~ burn_year)%>%
-  mutate(
-      pct_change = (10^estimate - 1) * 100,
-      pct_conf_low = (10^conf.low - 1) * 100,
-      pct_conf_high = (10^conf.high - 1) * 100
-    ) %>%
-    # Rounding for readability
-    mutate(across(c(pct_change, pct_conf_low, pct_conf_high), ~round(., 2)))
-
-check <- post_hoc_results%>%filter(param == "NO3")
-```
-
-## Do parameters vary between reservoirs across the study period ?
-
-```{r}
-#Welch ANOVA test which does not assume equal variances (which is typically not the case)
-welch_res_results <- chem_transformed_res %>%
-  group_by(param) %>%
-  group_modify(~{
-      res <- .x %>% welch_anova_test(log_value ~ site_code)
-      res$test_used <- "Welch ANOVA"
-      return(as_tibble(res))
-  })%>%
-  mutate(p.sig = ifelse(p < 0.05,"*" , ""))%>%
-  select(param, DFd,p, test_used, p.sig)
-welch_res_results
-
-# Post-Hoc: Games-Howell
-# Games-Howell works for both equal and unequal variances.
-post_hoc_results <- chem_transformed_res %>%
-  #only do post-hoc for significant results from final results
-  filter(param %in% welch_res_results$param[welch_res_results$p.sig == "*"]) %>%
-  group_by(param) %>%
-  games_howell_test(log_value ~ site_code)%>%
-  mutate(
-      pct_change = (10^estimate - 1) * 100,
-      pct_conf_low = (10^conf.low - 1) * 100,
-      pct_conf_high = (10^conf.high - 1) * 100
-    ) %>%
-    # Rounding for readability
-    mutate(across(c(pct_change, pct_conf_low, pct_conf_high), ~round(., 2)))
-
-post_hoc_results%>%filter(param %in% c( "NO3"))%>%arrange(param)%>%print(n = Inf)
-```
-
-## Do parameters vary between years across the study period ?
-
-```{r}
-#Welch ANOVA test which does not assume equal variances (which is typically not the case)
-welch_res_results <- chem_transformed_res %>%
-  mutate(Year = factor(Year, levels = c("2021", "2022", "2023", "2024")))%>%
-  group_by(param) %>%
-  group_modify(~{
-      res <- .x %>% welch_anova_test(log_value ~ Year)
-      res$test_used <- "Welch ANOVA"
-      return(as_tibble(res))
-  })%>%
-  mutate(p.sig = ifelse(p < 0.05,"*" , ""))%>%
-  select(param, DFd,p, test_used, p.sig)
-welch_res_results
-
-# Post-Hoc: Games-Howell
-# Games-Howell works for both equal and unequal variances.
-post_hoc_results <- chem_transformed_res %>%
-    mutate(Year = factor(Year, levels = c("2021", "2022", "2023", "2024")))%>%
-  #only do post-hoc for significant results from final results
-  filter(param %in% welch_res_results$param[welch_res_results$p.sig == "*"]) %>%
-  group_by(param) %>%
-  games_howell_test(log_value ~ Year)%>%
-  mutate(
-      pct_change = (10^estimate - 1) * 100,
-      pct_conf_low = (10^conf.low - 1) * 100,
-      pct_conf_high = (10^conf.high - 1) * 100
-    ) %>%
-    # Rounding for readability
-    mutate(across(c(pct_change, pct_conf_low, pct_conf_high), ~round(., 2)))
-
-post_hoc_results%>%filter(param %in% c("ChlA", "K", "DOC", "NO3", "NH4", "SO4", "TSS"))%>%arrange(param)%>%print(n = Inf)%>%
-filter(param == "DOC")
-```
-
-
-```{r}
-# do anova for each parameter (doc, k, no3, nh4, so4 and TSS for burn group)
-# This compares the mean of each parameter between burned and unburned sites
-
-sitewise_anova <- chem_to_check %>%
-  #filter(param %in% c("DOC","DTN",  "K", "NO3", "NH4", "SO4", "TSS", "SC")) %>% # Filter for NO3 parameter
-  na.omit() %>% # Remove missing values
-  group_by(param) %>% # Group by site_code to test differences within each site
-  anova_test(
-    value ~ site_code)
-sitewise_anova
-
-
-# perform TUkeyHSD on group anova
-tukey_results <- chem_to_check %>%
-  #filter(param %in% c("DOC", "DTN", "K", "NH4", "SO4", "SC")) %>% # Pull significant parameters
-  group_by(param) %>%
-  tukey_hsd(value ~ site_code)
-tukey_results
-
-
-# repeat measures anova (wilcox since data is not normally distributed)
-# This compares within site parameters between years to see if there is a meaningful difference between years
-
-pairwise_results <- chem_to_check %>%
-  #filter(param == parameter) %>% # Filter for NO3 parameter
-  na.omit() %>% # Remove missing values
-  group_by(site_code, param) %>% # Group by site_code to test differences within each site
-  pairwise_wilcox_test(
-    value ~ Year, 
-    p.adjust.method = "bonferroni"
-  ) %>%
-  mutate(comparison = paste(group1, group2, sep = "-"), 
-         p.adj = ifelse(p.adj < 0.05, p.adj,NA))%>% # Create a comparison column
-  select(site_code,param,  comparison, p.adj)%>%# Keep only relevant columns
-  pivot_wider( id_cols = c(site_code, param),
-    names_from = comparison, 
-    values_from = p.adj,
-    names_sort = TRUE )%>%
-  select(site_code, param, `2021-2022`,`2022-2023`,`2021-2023`)%>%
-  filter(param %in% c("ChlA","Turbidity", "TSS", "DOC", "NO3", "NH4", "SO4"))
-
-pairwise_results
-
-pairwise_results_nosite <- chem_to_check %>%
-  na.omit() %>% # Remove missing values
-  group_by(param) %>% # Group by site_code to test differences within each site
-  pairwise_wilcox_test(
-    value ~ Year, 
-    p.adjust.method = "bonferroni"
-  ) %>%
-  mutate(comparison = paste(group1, group2, sep = "-"), 
-         p.adj = ifelse(p.adj < 0.05, p.adj,NA))%>% # Create a comparison column
-  select(param,  comparison, p.adj)%>%# Keep only relevant columns
-  pivot_wider( id_cols = c( param),
-    names_from = comparison, 
-    values_from = p.adj,
-    names_sort = TRUE )%>%
-  select(param, `2021-2022`,`2022-2023`,`2021-2023`)%>%
-  filter(param %in% c("ChlA","Turbidity", "TSS", "DOC", "NO3", "NH4", "SO4"))
-
-pairwise_results_nosite
-
-```
-
-
-## Reporting Calculations
-These data and calculations will be included in the funder report to give an overview of how the system is changing year to year based on our study
-
-### Chlorophyll a eutrophic status
-
-In cold water lakes (our study sites), mesotrophic levels are defined as between 2.6 and 8 µg/L, and eutrophic levels are greater than 8 µg/L. Under 2.6 µg/L is considered Oligotrophic. 
-
-```{r}
-
-chla_status_site_year <- most_recent_chem%>%
-  filter(!is.na(ChlA))%>%
-  filter(site_code %in% mainstem_Res_only)%>%
-  mutate(eu_status  = case_when(ChlA >= 2.6 &ChlA <= 8 ~ "Mesotrophic", 
-                                ChlA > 8 ~ "Eutrophic",
-                                ChlA < 2.6 ~ "Oligotrophic"))%>%
-  group_by(site_code, Year, eu_status, burn_group)%>%
-  summarise(eu_stats = n())%>%
-  ungroup()%>%
-  pivot_wider(names_from = eu_status, values_from = eu_stats)%>%
-  mutate_at(vars(-Year), ~replace(., is.na(.), 0))%>%
-  rowwise()%>%
-  mutate(total_samples = sum(c(Eutrophic, Mesotrophic, Oligotrophic)),
-    perc_eu = round((Eutrophic/total_samples)*100, digits= 1), 
-         perc_meso = round((Mesotrophic/total_samples)*100, digits= 1),
-         perc_meso_eu = round(((Eutrophic+Mesotrophic)/total_samples)*100, digits= 1), 
-        perc_oligo = round((Oligotrophic/total_samples) *100, digits= 1),
-    Year = as.character(Year))
-
-all_burn <- chla_status_site_year%>%
-  group_by(burn_group, Year)%>%
-  summarise(total_samples = sum(total_samples), 
-            perc_eu = sum(Eutrophic)/sum(total_samples)*100, 
-            perc_meso = sum(Mesotrophic)/sum(total_samples)*100, 
-            perc_meso_eu = sum(Eutrophic + Mesotrophic)/sum(total_samples)*100, 
-            perc_oligo = sum(Oligotrophic)/sum(total_samples)*100)
-
-all_years <- chla_status_site_year%>%
-  group_by(burn_group)%>%
-  summarise(total_samples = sum(total_samples), 
-            perc_eu = sum(Eutrophic)/sum(total_samples)*100, 
-            perc_meso = sum(Mesotrophic)/sum(total_samples)*100, 
-            perc_meso_eu = sum(Eutrophic + Mesotrophic)/sum(total_samples)*100, 
-            perc_oligo = sum(Oligotrophic)/sum(total_samples)*100)
-
-long_chla_status <- chla_status_site_year%>%
-  select(site_code, Year, total_samples, perc_eu, perc_meso, perc_meso_eu, perc_oligo)%>%
-  pivot_longer(cols = c(perc_eu, perc_meso, perc_meso_eu, perc_oligo), names_to = "category", values_to = "value" )
-
-long_chla_status$site_code = factor(long_chla_status$site_code, levels = c("LNGR","JOER" , "CBRR", "PTRR", "BRNR" ))
-
-chla_status <- c(
-  perc_eu = "% eutrophic",
-  perc_meso = "% mesotrophic ",
-  perc_meso_eu = "% mesotrophic & eutrophic",
-  perc_oligo = "% oligotrophic"
-)
-
-#PLOT
- long_chla_status%>%
-  filter(site_code %in% mainstem_Res_only )%>%
-   filter(category != "perc_meso_eu")%>%
-  ggplot(aes(x = Year, y = value,group = site_code, color =  site_code))+
-  scale_color_manual(values = colorsBS_site_code)+
- geom_line()+
-   geom_point()+
-  theme_bw(base_size = 15)+
-facet_wrap(~category, ncol = 1, labeller = labeller(category = chla_status))+
-  labs(
-    x = "Year",
-    y = "Percent of chlorophyll-*a* samples", 
-    color = "Reservoir")+
-  theme(axis.title.y = ggtext::element_markdown())
+ggplot(chem_rs%>%filter(!is.na(ChlA)), aes(x = mean_sdd, y = DOC, shape = Year))+
+  geom_point()+
+  facet_wrap(~site_code)+
+  theme_bw()+
+  labs(x = "Estimated Mean Secchi Disk Depth (m)", y = "Sample DOC (mg/L)")
 
 
 ```
 
-## Chl-a Stats
 
-```{r}
-# grouped by site code
-chla_status_site_year <- most_recent_chem%>%
-  filter(!is.na(ChlA))%>%
-  filter(site_code %in% mainstem_Res_only)%>%
-  group_by(site_code, Year)%>%
-  summarise(mean_chla = mean(ChlA), 
-            median_chla = median(ChlA), 
-            min_chla = min(ChlA), 
-            max_chla = max(ChlA), 
-            sd_chla = sd(ChlA))
+# SI
+
+## SI Table 1: PO4 detections over time
 
 
-# Grouped by burn status
-
-chla_status_site_year <- most_recent_chem%>%
-  filter(!is.na(ChlA))%>%
-  filter(site_code %in% mainstem_Res_only)%>%
-  group_by(site_code, Year, burn_group)%>%
-  summarise(mean_chla = mean(ChlA), 
-            median_chla = median(ChlA), 
-            min_chla = min(ChlA), 
-            max_chla = max(ChlA), 
-            sd_chla = sd(ChlA))
-
-#create flextable for these stats
-chla_status_site_year <- chla_status_site_year%>%
-  ungroup()%>%
-  mutate(burn_group = factor(burn_group, levels = c("Pre", "Post")))%>%
-  mutate(Year = as.character(Year))%>%
-  select(-site_code)%>%
-  pivot_longer(cols = c(mean_chla, median_chla, min_chla, max_chla, sd_chla), names_to = "statistic", values_to = "value")%>%
-  mutate(statistic = factor(statistic, levels = c("mean_chla", "median_chla", "min_chla", "max_chla", "sd_chla")))
-```
-
-### Comparing betwen burn groups and between primary reservoir sites
-
-
-```{r}
-# Prep data
-chla_anova_df <- most_recent_chem%>%
-  filter(!is.na(ChlA) )%>% #remove NAs
-  filter(site_code %in% mainstem_Res_only) # only grab primary reservoirs
-
-#perform anova test between groups
-group_anova <- aov(ChlA ~ burn_group, data = chla_anova_df)
-summary(group_anova)
-# perform Tukey test to get magnitude of differences for chl-a between groups
-TukeyHSD(group_anova)%>%tidy()%>%
-  select(-term)
-
-#perform anova test between sites
-site_anova <- aov(ChlA ~ site_code, data = chla_anova_df)
-
-summary(site_anova)
-
-# perform Tukey test to get magnitude of differences for chl-a between groups
-TukeyHSD(site_anova)%>%tidy()%>%
-  #filter(adj.p.value < 0.05)%>%
-  select(-term, -null.value)%>%
-  mutate(sig = ifelse(adj.p.value < 0.05, "yes", "no"))%>%
-  arrange(adj.p.value)
-```
-
-
-### Comparing years or between sites and years
-
-Might be too many comparisons to reasonably test
-
-```{r}
-#perform anova test between groups and year
-group_year_anova <- aov(ChlA ~ burn_year, data = chla_anova_df)
-
-summary(group_year_anova)
-tukey_group_year <- TukeyHSD(group_year_anova)%>%tidy()%>%
-  filter(adj.p.value < 0.05)%>%
-  select(-term)
-tukey_group_year
-
-#perform anova test between sites and year
-site_year_anova <- aov(ChlA ~ site_year, data = chla_anova_df)
-
-summary(site_year_anova)
-TukeyHSD(site_year_anova)%>%tidy()%>%
-  filter(adj.p.value < 0.05)%>%
-  select(-term)
-```
-
-
-```{r}
-compare_site_years <- function(target_site) {
-  # Filter data for the selected site
-  site_data <- chla_anova_df %>%
-    filter(site_code == target_site)
-  
-  # Perform ANOVA
-  site_year_anova <- aov(ChlA ~ site_year, data = site_data)
-  
-  #Perform Tukey HSD and tidy the results
-  tukey_results <- TukeyHSD(site_year_anova) %>%
-    tidy() %>%
-    #filter(adj.p.value < 0.05) %>%
-    select(-term, -null.value)  # Drop the 'term' column
-  
-  return(tukey_results)
-}
-
-#summary(compare_site_years("CBRR"))
-results <- map_df(mainstem_Res_only, compare_site_years)%>%
-  bind_rows()%>%
-  filter(adj.p.value < 0.05)
-results
-
-```
-
--	Stats (significant):
--		Between unburned- burned all years: 
-	mean =  - 1.22,  conf:( -0.77 -  -1.67)
-o	Between unburned- burned : 
-	No difference in 2021
-	2022: mean =  - 1.07,  conf:( -0.18 -  -1.95)
-	2023: mean = -2.29, conf: (-0.68  - -3.9)
-o	Within site between years:
-	JOER 2022- 2021: mean = 1.17, conf: (0.32 – 2.02)
-	BRNR 2023 – 2022: mean = 2.81, conf: (1.32,4.3)
-	Otherwise no significant increases at any sites
-o	Between sites:
-	Full anova: pvalue = 1.52e-08
-	JOER – BRNR: mean = -1.53
-	LNGR – BRNR: mean = -2.19
-	PTRR – BRNR: mean = -1.21
-	LNGR – CBRR: mean = -1.44
-
-
-
-
-
-## Levene's test
-
-
-```{r}
-library(car)
-
-
-#perform levene's test between groups
-levene_group <- leveneTest(ChlA ~ burn_group, data = chla_anova_df)
-levene_group
-
-#perform levene's test between groups and year
-levene_group_year <- leveneTest(ChlA ~ burn_year, data = chla_anova_df)
-levene_group_year
-
-#perform levene's test between groups and year
-
-
-levene_group_year2223 <- leveneTest(ChlA ~ burn_year, data = chla_anova_df%>%filter(Year >= 2022))
-levene_group_year2223
-
-
-
-
-# perform levene's test between sites
-levene_site <- leveneTest(ChlA ~ site_code, data = chla_anova_df)
-levene_site
-
-
-
-```
-
-
-
-# When does nitrate peak?
-
-Nearly all sites seem to peak with snowmelt, PTRR had peaks in August of 2021/2022 (PTRR's storage timing changed in 2023 due to Comanche + Hourglass being returned to service). LNGR had a peak in August of 2023.
-
-```{r}
-no3_stats <- chem_to_check%>%
-  filter(param == "NO3")%>%
-  group_by(site_code, Year, burn_group)%>%
-  summarise(mean_no3 = mean(value, na.rm = T), 
-            max_no3 = max(value, na.rm = T),
-            min_no3 = min(value, na.rm = T),
-            sd_no3 = sd(value, na.rm = T),
-            max_no3_season = season[which.max(value)], 
-            max_no3_date = Date[which.max(value)])
-
-```
-
-# PO4 detections
-
+Looking at where PO4 is present (above 0.01 detection limit) and if that
+is changing over time
 ```{r}
 # How many samples per study reservoirs
 
 tidy_chem%>%
-  filter( site_code %in% mainstem_Res_only)%>%
+  filter( site_code %in% primary_study_res)%>%
   pivot_longer(cols = c(ChlA,Turbidity, TSS, DTN,  DOC:NO3, SO4, PO4), 
                names_to = "param", 
                values_to = "value")%>%
@@ -1643,7 +1403,7 @@ tidy_chem%>%
 # How many samples per year at study reservoirs
 
 tidy_chem%>%
-  filter( site_code %in% mainstem_Res_only)%>%
+  filter( site_code %in% primary_study_res)%>%
   pivot_longer(cols = c(ChlA,Turbidity, TSS, DTN,  DOC:NO3, SO4, PO4), 
                names_to = "param", 
                values_to = "value")%>%
@@ -1671,287 +1431,145 @@ tidy_chem%>%
 
 ```
 
-
-
-# Anova of LNGR NO3 vs all other sites
-
 ```{r}
-lngr_df <- most_recent_chem %>%
-  filter(site_code %in% mainstem_Res_only)%>%
-  pivot_longer(cols = c(ChlA,Turbidity, TSS, DTN,  DOC:NO3, SO4, PO4), 
-               names_to = "param", 
-               values_to = "value")%>%
-  filter(param == "NO3")%>%
-  mutate(site = case_when(site_code == "LNGR" ~ "LNGR", 
-                          TRUE ~ "Other"))
-  #group_by(site)%>%
-  lngr_anova <- aov(value ~ site, data = lngr_anova)
-  lngr_anova
-TukeyHSD(lngr_anova)%>%tidy()%>%
-  filter(adj.p.value < 0.05)%>%
-  select(-term)
-  
-  
-```
 
-# Longitudinal chla/no3
+upper_PO4 <- filter(tidy_chem, watershed %nin% c("CLP Mainstem - Lower","CLP Tributary - Lower"))%>%
+  select(site_code,location_type, Date, Turbidity, PO4, Year)%>%
+  mutate(location_type = case_when(
+    site_code %in% c("JWC", "BEAV", "LBEA", "PENN", "SFM", "SAWM", "JOEI", "CBRI", "COMI", "HORI") ~ "Tributary",
+    TRUE ~ location_type))%>%
+  group_by(location_type, Year)%>%
+  # fina what percent of each year had PO4 levels above 0.01 and get the mean level for each location type and year
+  summarise(total_samples = n(),
+            PO4_perc_dect = sum(PO4 >= 0.01, na.rm = TRUE)/n()* 100,
+            #calculate mean of PO4 for only samples above 0.01, excluding samples lower than 0.01
+            mean_PO4 = mean(PO4[PO4 >= 0.01], na.rm = TRUE),
+            samples = paste0(sum(PO4 >= 0.01, na.rm = TRUE),"/",n() ))%>%
+  # pivot wider by year
+  pivot_wider(names_from = Year, values_from = c(total_samples, PO4_perc_dect, mean_PO4, samples)) %>%
+  mutate(across(total_samples_2021:mean_PO4_2024, ~replace_na(.x, 0)))%>%
+  mutate(across(samples_2021:samples_2024, ~replace_na(.x, "0/0")))%>%
+  # if a column is numeric, round it to 2 decimal places
+  mutate(across(where(is.numeric), ~round(.x, 2)))%>%
+  arrange(factor(location_type, levels = c("Inflow", "Reservoir", "Outflow", "Mainstem", "Tributary")))%>%
+  select(location_type, total_samples_2021:mean_PO4_2024)
 
-## Joe Wright Creek
+#### Creating Table ####
+# Add spacer columns
+upper_PO4_with_spacers <- upper_PO4 %>%
+  mutate(sp1 = NA, sp2 = NA, sp3 = NA) %>%
+  select(1, 2:5, sp1, 6:9, sp2, 10:13, sp3)
 
-```{r}
-joe_wright <- most_recent_chem%>%
-  filter(site_code %in% c("JOEI", "JOER", "CBRI", "CBRR", "CHD", "JWC"))%>%
-  pivot_longer(cols = c(ChlA:NO3), 
-               names_to = "param", 
-               values_to = "value")
+# Rename columns with valid names
+colnames(upper_PO4_with_spacers) <- c(
+  "Site_Type",           # 1
+  "n_2021", "n_2022", "n_2023", "n_2024", "sp1",  # 2-6
+  "pct_2021", "pct_2022", "pct_2023", "pct_2024", "sp2",  # 7-11
+  "mean_2021", "mean_2022", "mean_2023", "mean_2024", "sp3" # 12-16
+)
 
-network_data <- joe_wright %>%
-  filter(param == "ChlA")
+# Create the flextable
+ft1 <- flextable(upper_PO4_with_spacers) %>%
+  set_header_labels(
+    Site_Type = "",
+    n_2021 = "2021", n_2022 = "2022", n_2023 = "2023", n_2024 = "2024",
+    pct_2021 = "2021", pct_2022 = "2022", pct_2023 = "2023", pct_2024 = "2024",
+    mean_2021 = "2021", mean_2022 = "2022", mean_2023 = "2023", mean_2024 = "2024",
+    sp1 = "", sp2 = "", sp3 = ""
+  ) %>%
+  add_header_row(
+    values = c("Site Type", "Samples per Year", "", "Percent above Detection Limit", "", 
+               "Mean PO4 Above Detection Limit", ""),
+    colwidths = c(1, 4, 1, 4, 1, 4, 1)
+  ) %>%
+  theme_vanilla() %>%
+  align(align = "center", part = "all") %>%
+  valign(valign = "center", part = "all") %>%
+  fontsize(size = 11, part = "all") %>%
+  font(fontname = "Times New Roman", part = "all") %>%
+  set_table_properties(layout = "autofit", width = 1)%>%
+  autofit()
 
-  network_anova <- aov(value ~ site_code, data = network_data)
- summary(network_anova)
- 
-TukeyHSD(network_anova)%>%tidy()%>%
-  #filter(adj.p.value < 0.05)%>%
-  select(-term)
-
-```
-
-## JOER
-
-```{r}
-joer_data <- joe_wright %>%
-  filter(param == "ChlA" & site_code %in% c("JOEI", "JOER", "CBRI"))
-  #group_by(site)%>%
-  joer_anova <- aov(value ~ site_code, data = joer_data)
- summary(joer_anova)
- 
-TukeyHSD(joer_anova)%>%tidy()%>%
-  #filter(adj.p.value < 0.05)%>%
-  select(-term)
-  
-
-
-```
-
-## CBRR
-
-```{r}
-cbrr_data <- joe_wright %>%
-  filter(param == "ChlA" & site_code %in% c("CBRI", "CBRR", "CHD", "JWC"))
-  #group_by(site)%>%
-  cbrr_anova <- aov(value ~ site_code, data = cbrr_data)
- summary(cbrr_anova)
- 
-TukeyHSD(cbrr_anova)%>%tidy()%>%
-  #filter(adj.p.value < 0.05)%>%
-  select(-term)
-  
+ft1
+save_as_docx(ft1,path = here(paper_draft_dir,"SI_1_Table.docx"))
 
 
 ```
 
-## Test variability and means between Inflows and JWC
+## SI Table 2: Mean, SD, Max for nutrients for reservoirs
+
+Calculate mean, sd and max for key constituents for the 7 main study
+reservoirs
 
 ```{r}
 
-inflow_jwc <- joe_wright %>%
-  filter(param == "ChlA" & site_code %in% c("JOEI", "JWC", "CBRI"))
+key_table <- tidy_chem %>%
+  filter(site_code %in% c("LNGR", "JOER","COMR", "HORR",  "CBRR", "PTRR", "BRNR")) %>%
+  select(site_code, Year, pH,SC,TSS, DOC, DTN, K,NH4,NO3, SO4) %>%
+  pivot_longer(cols = c(pH,SC,TSS, DOC, DTN, K,NH4,NO3, SO4),
+               names_to = "parameter",
+               values_to = "value") %>%
+  #get the median and max for each site
+  group_by(site_code, parameter) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            sd = sd(value, na.rm = TRUE),
+            max = max(value, na.rm = TRUE)) %>%
+  ungroup()%>%
+  pivot_longer(cols = c(median, max, sd),
+               names_to = "stat",
+               values_to = "stat_value")%>%
+  unite("param_stat", parameter, stat, sep = " ") %>%
+  pivot_wider(names_from = param_stat, values_from = stat_value)%>%
+  arrange(factor(site_code, levels = c("LNGR", "JOER", "HORR", "COMR", "CBRR", "PTRR", "BRNR")))%>%
+  select(site_code:`NO3 sd`,`SO4 median`:`pH sd`, `SC median`,`SC max`,`SC sd`)%>%
+  #round all numeric values to 2 digits
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
 
-levene_jwc_inflows <- leveneTest(value ~ location_type, data = inflow_jwc)
-levene_jwc_inflows
 
- jwc_inflow_anova <- aov(value ~ location_type, data = inflow_jwc)
+param_oi <- c( "DOC", "DTN", "K", "NH4", "NO3", "SO4", "TSS", "pH", "SC")
+
+params <- chem_units %>%
+  filter(simple %in% param_oi) %>%
+  arrange(match(simple, param_oi)) %>%
+  pull(Parameters)
+
+
+# Create a basic flextable
+ft2 <- key_table %>%
+  rename(Site = site_code) %>%
+  flextable() %>%
+  set_header_labels(
+    .labels = setNames(rep(c("mean", "max", "sd"), times = length(params)),
+                      nm = as.vector(t(outer("", c("median", "max","sd"), paste, sep = " "))))) %>%
+  delete_part(part = "header")%>%
+  add_header_row(
+    values = c("", rep(c("Median", "Max", "SD"), times = length(params))),  
+    colwidths = c(1, rep(1, length(params)*3))  # Adjust colwidths for Site and parameters
+  ) %>%
+  add_header_row(
+    values = c("Site", params), 
+    colwidths = c(1, rep(3, length(params)))  # Adjust colwidths for Site and parameters
+  ) %>%
   
-TukeyHSD(jwc_inflow_anova)%>%tidy()%>%
-  #filter(adj.p.value < 0.05)%>%
-  select(-term)
-  
+  add_header_row(
+    values = c("", 
+                "mg L⁻¹", "mg L⁻¹", "mg L⁻¹", 
+               "mg L⁻¹", "mg L⁻¹", "mg L⁻¹", "mg L⁻¹",  " ", "µS cm⁻¹"), 
+    colwidths = c(1, rep(3, length(params)))  # Adjust colwidths again to match
+  ) %>%
+  merge_v(j = ~Site) %>%
+  merge_h(part = "header") %>%
+  border_remove() %>%
+  border_outer() %>%
+  border_inner_v() %>%
+  border_inner_h() %>%
+  align(align = "center", part = "all") %>%
+  valign(valign = "center", part = "all") %>%
+  fontsize(size = 11, part = "all") %>%
+  font(fontname = "Times New Roman", part = "all") %>%
+  set_table_properties(layout = "autofit", width = 1)%>%
+  autofit()
 
-```
-
-
-
-
-
-
-# South Fork section
-
-```{r}
-chem_transformed_res <- tidy_chem%>%
-    filter(site_code %in% c("COMI", )) %>%
-  pivot_longer(cols = c(ChlA,Turbidity, TSS, DTN,  DOC:NO3, SO4), 
-               names_to = "param", 
-               values_to = "value")%>%
-  select(site_code, Date, Year, param, value, burn_group, burn_year)%>%
-  mutate(year_site = paste0(Year, "_", site_code))%>%
-  mutate(log_value = log10(value + 1))%>%
-  na.omit()
-
-ggplot(chem_transformed_res, aes(x = value, color = year_site))+
-  geom_histogram()+
-  facet_wrap(~param, scales = "free")
-```
-
-
-
-```{r}
-sf_chem <- tidy_chem%>%
-  filter(site_code %in% c("COMI", "HORI", "COMR", "HORR", "COMO", "HORO", "BEAV", "SFM"))%>%
-  pivot_longer(cols = c(ChlA,Turbidity, TSS, DTN,  DOC:NO3, SO4, PO4), 
-               names_to = "param", 
-               values_to = "value")%>%
-  mutate(year_site = paste0(Year, "_", site_code))%>%
-  mutate(log_value = log10(value + 1), 
-         fill_status = if_else(Year <= 2022, "Unfilled", "Filled"))
-
-
-ggplot(sf_chem, aes(x = value, color = year_site))+
-  geom_histogram()+
-  facet_wrap(~param, scales = "free")
-```
-
-## Inflow vs outflow unfilled
-
-```{r}
-inflow_outflow <- sf_chem %>%
-  filter(site_code %in% c("COMI", "HORI", "COMR", "HORR", "COMO", "HORO"))%>%
-  filter(param == "ChlA"  & !is.na(value)& location_type %in% c("Inflow", "Outflow"))%>%
-  filter(Year <= 2022)%>%
-  select(site_code, location_type, Date, value)
-  
-
- in_out_anova <- aov(value ~ location_type, data = inflow_outflow)
-  summary(in_out_anova)
-
-TukeyHSD(in_out_anova)%>%tidy()%>%
-  filter(adj.p.value < 0.05)%>%
-  select(-term)
-
-
-```
-
-## Outflow unfilled to downstream
-
-```{r}
-outflow_ds <- sf_chem %>%
-  filter(param == "ChlA"  & !is.na(value)& location_type %in% c( "Outflow", "Stream", "Mainstem"))%>%
-  filter(Year <= 2022)%>%
-  select(site_code, location_type, Date, value)
-  
-
- outflow_ds_anova <- aov(value ~ location_type, data = outflow_ds)
-  summary(in_out_anova)
-
-TukeyHSD(outflow_ds_anova)%>%tidy()%>%
-  #filter(adj.p.value < 0.05)%>%
-  select(-term)
-
-
-```
-
-
-## Test between unfilled vs filled
-
-```{r}
-
-sf_fill_unfill <- sf_chem 
-  filter(param == "ChlA"  & !is.na(value))%>%
-  select(site_code, location_type,Year, value)%>%
-  mutate(fill_status = ifelse(Year <= 2022, "unfilled", "filled"))%>%
-  group_by(site_code) %>% # Group by site_code to test differences within each site
-  pairwise_wilcox_test(
-    value ~ fill_status, 
-    p.adjust.method = "bonferroni")
-
-sf_fill_unfill
-
-sf_chem %>%
-  filter(site_code %in% c("SFM", "BEAV"))%>%
-   filter(param == "ChlA"  & !is.na(value))%>%
-  mutate(fill_status = ifelse(Year <= 2022, "unfilled", "filled"))%>%
-  group_by(site_code, fill_status)%>%
-  summarise(mean_chla = mean(value))%>%
-  pivot_wider(names_from = fill_status, values_from = mean_chla)%>%
-  mutate(change = (filled/unfilled)*100)
-
-```
-
-
-
-
-# Mean all params
-
-Code to make SI tables for minimum and maximum values 
-```{r}
-
-yearly_means <- tidy_chem%>%
-  filter(Campaign %nin% c("CLP  Mainstem-Fort Collins","CLP Mainstem-Canyon" )& site_code %nin% c("PJW","JWC"  ,"PBR","PBD", "PNF","PSF","SFM","SAWM", "LDRT1", "legacy","timberline","ELC","archery","PFAL", "BEAV") & Year >= 2021)%>%
-  select(-c("data_source","Lat","Long","location_type","Campaign","watershed","burn_status","Buffer_Level","Watershed_Level","distance_upstream_km", "FCW_number", "Field_DO_mgL","Field_Cond_µS_cm","Field_Temp_C"))%>%
-  group_by(Year, site_code, Site)%>%
-  summarise(across(starts_with(all_params), mean, na.rm = TRUE),
-            .groups = 'drop')
- 
-
-
-  
-  subset_table <- yearly_means%>%
-  mutate(Site = paste0(Site, " (", site_code, ")"))%>%
-    #select(Site, Year, `Chlorophyll a (ug/L)` = ChlA,     `SC (uS/cm)` = SC,    pH,    `DOC (mg/L)` = DOC)%>%
-  #select(Site, Year,`TDN (mg/L)` = DTN,     `NH4 (mg/L)` = NH4,   	`NO3 (mg/L)` = NO3,   `PO4 (mg/L)` = PO4 )%>%
-  #select(Site, Year,`SO4 (mg/L)` = SO4,     `Na (mg/L)` = Na,   	`Ca (mg/L)` = Ca,   `Cl (mg/L)` = Cl )%>%
-  select(Site, Year,`K (mg/L)` = K,     `Mg (mg/L)` = Mg,   	`F (mg/L)` = `F`, TSS)%>%
-    
-  pivot_longer(cols = 
-                   #c(`Chlorophyll a (ug/L)`:`DOC (mg/L)`),
-                  #c(`TDN (mg/L)`:`PO4 (mg/L)`),
-               #c(`SO4 (mg/L)`:`Cl (mg/L)`),
-               c(`K (mg/L)`:TSS),
-               names_to = "Parameter", values_to = "Value")%>%
-  pivot_wider(names_from = c(Parameter, Year), values_from = Value, values_fill = 0)%>%
-  select(Site, order(colnames(.)))
-
-  subset_table$Site <- factor(subset_table$Site, levels = c("Barnes Meadow Outflow (BMD)", "Barnes Meadow Reservoir (BRNR)", "Chambers Inlet (CBRI)", "Chambers Reservoir (CBRR)", "Chambers Outflow (CHD)", "Joe Wright Inlet (JOEI)", "Joe Wright Reservoir (JOER)", "Comanche Inflow (COMI)",  "Comanche Reservoir (COMR)", "Comanche Outflow (COMO)", "Hourglass Inflow (HORI)", "Hourglass Reservoir (HORR)", "Hourglass Outflow (HORO)","Long Draw Outlet (LNGO)","Long Draw Reservoir (LNGR)","Peterson Outlet (PTRO)", "Peterson Reservoir (PTRR)"     ))
-
-  #create standard border color and width
-  std_border <- fp_border_default(width = 1, color = "black")
-  
-ft <- flextable(subset_table)%>%
-  separate_header() %>%
-  align(align = "center", part = "all")%>%
-  colformat_double( big.mark = "'", decimal.mark = ".", digits = 2)%>%
-  set_table_properties(layout = "fixed")%>%
-  border_remove()%>%
-  border_outer(part="all", border = std_border )%>%
-  border_inner_h(border = std_border, part="all")%>%
-   border_inner_v(border = std_border, part="all")%>%
-  autofit()%>%
-  italic( j = "Site")%>%
-  fontsize( size = 8, part = "body")
-
-#Highlighting columns other than Site
-# Max is red
-# min is blue
-columns_to_highlight <- names(subset_table) %>%
-  keep(~ !grepl("Site", .))
-
-  for (i in 1:length(columns_to_highlight)) {
-    max_color <- "#CC3311"
-    min_color <- "#0077BB"
-    
-    ft <- color(ft, j = i+1, 
-                    i = ~ subset_table[i+1] == max(subset_table[i+1], na.rm = TRUE), 
-                    color = max_color)
-    
-    ft <- color(ft, j = i+1, 
-                    i = ~ subset_table[i+1] == min(subset_table[i+1], na.rm = TRUE), 
-                    color = min_color)
-  }
-  
-
-ft
-
-  
 sect_properties <- prop_section(
   page_size = page_size(
     orient = "landscape",
@@ -1961,20 +1579,285 @@ sect_properties <- prop_section(
   page_margins = page_mar()
 )
 
-ft
-
-# Save the table to a Word document
-save_as_docx(ft, path = "data/table_export3.docx", pr_section = sect_properties)
-
-
+save_as_docx( ft2, path = here(paper_draft_dir,"SI_2_table.docx"))
 
 ```
 
-# Maps / Spatial
+## SI Table 3: Mean, SD, Max for remainders for reservoirs
 
-## Prepping Landcover, Elevation/Aspect, Snow Persistance and Soil Burn Severity Data
+```{r}
 
-### NLCD
+base_cations_table <- tidy_chem %>%
+  filter(site_code %in% c("LNGR", "JOER","COMR", "HORR",  "CBRR", "PTRR", "BRNR")) %>%
+  select(site_code, Year, ANC, Na, Mg, Ca, F, Cl) %>%
+  pivot_longer(cols = c(ANC, Na, Mg, Ca, F, Cl),
+               names_to = "parameter",
+               values_to = "value") %>%
+  #get the median and max for each site
+  group_by(site_code, parameter) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            max = max(value, na.rm = TRUE),
+            sd = sd(value,na.rm = T)) %>%
+  ungroup()%>%
+  pivot_longer(cols = c(median, max,sd),
+               names_to = "stat",
+               values_to = "stat_value")%>%
+  unite("param_stat", parameter, stat, sep = " ") %>%
+  pivot_wider(names_from = param_stat, values_from = stat_value)%>%
+  arrange(factor(site_code, levels = c("LNGR", "JOER", "HORR", "COMR", "CBRR", "PTRR", "BRNR")))%>%
+  #round all numeric values to 2 digits
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
+
+
+param_oi <- c("ANC", "Ca", "Cl", "F", "Mg", "Na")
+
+params <- chem_units %>%
+  filter(simple %in% param_oi) %>%
+  arrange(match(simple, param_oi)) %>%
+  pull(Parameters)
+
+
+# Create a basic flextable
+ft3 <- base_cations_table %>%
+  rename(Site = site_code) %>%
+  flextable() %>%
+  set_header_labels(
+    .labels = setNames(rep(c("mean", "max", "sd"), times = length(params)),
+                      nm = as.vector(t(outer("", c("median", "max","sd"), paste, sep = " "))))) %>%
+  delete_part(part = "header")%>%
+  add_header_row(
+    values = c("", rep(c("Median", "Max", "SD"), times = length(params))),  
+    colwidths = c(1, rep(1, length(params)*3))  # Adjust colwidths for Site and parameters
+  ) %>%
+  add_header_row(
+    values = c("Site", params), 
+    colwidths = c(1, rep(3, length(params)))  # Adjust colwidths for Site and parameters
+  ) %>%
+  
+  add_header_row(
+    values = c("", 
+                "mg L⁻¹", "mg L⁻¹", "mg L⁻¹", 
+               "mg L⁻¹", "mg L⁻¹", "mg L⁻¹"), 
+    colwidths = c(1, rep(3, length(params)))  # Adjust colwidths again to match
+  ) %>%
+  merge_v(j = ~Site) %>%
+  merge_h(part = "header") %>%
+  border_remove() %>%
+  border_outer() %>%
+  border_inner_v() %>%
+  border_inner_h() %>%
+  align(align = "center", part = "all") %>%
+  valign(valign = "center", part = "all") %>%
+  fontsize(size = 11, part = "all") %>%
+  font(fontname = "Times New Roman", part = "all") %>%
+  set_table_properties(layout = "autofit", width = 1)%>%
+  autofit()
+
+sect_properties <- prop_section(
+  page_size = page_size(
+    orient = "landscape",
+    width = 8.3, height = 11.7
+  ),
+  type = "continuous",
+  page_margins = page_mar()
+)
+
+save_as_docx( ft3, path = here(paper_draft_dir,"SI_3_table.docx"))
+
+```
+
+## RS Results
+
+```{r}
+
+```
+
+## SI Plot 1: Timelines of key parameters at reservoirs
+
+```{r}
+
+SI_plot <- tidy_chem %>%
+  filter(site_code %in% c("LNGR", "JOER","COMR", "HORR",  "CBRR", "PTRR", "BRNR"))%>%
+  pivot_longer(cols = c( ChlA, DTN, pH, SC, DOC, K, NH4, NO3, SO4, K, Ca, ANC, Na, Mg, Ca, F, Cl),
+               names_to = "parameter",
+               values_to = "value")%>%
+  left_join(chem_units, by = c("parameter" = "simple"))%>%
+  mutate(Date = as.POSIXct(Date ))
+
+
+#plot 1 
+
+Si_timeline_1 <- ggplot(SI_plot%>%filter(parameter %in% c("DOC", "DTN","pH", "SC", "ANC"))%>%
+         mutate(parameter = factor(parameter, levels = c("DOC", "DTN","pH", "SC", "ANC"))),
+       aes(x = Date, y = value, group = interaction(site_code, Year), color = site_code)) +
+  geom_line() +
+  geom_point()+
+  facet_grid(rows = vars(combined),cols = vars(Year), scales = "free", switch = "y") +
+  labs(x = "Date",
+       y = "") +
+  scale_color_manual(values = colorsBS_site_code)+
+  scale_x_datetime(
+    date_labels = "%b",  # e.g., May\n2021
+    date_breaks = "month"
+  ) +
+  labs(color = "Site")+
+  theme_bw() +
+  theme(strip.placement = "outside", 
+        legend.position = "bottom",
+        # make the x ticks at 45 degrees
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot_image(Si_timeline_1,"SI_timeline_1.png")
+
+
+SI_timeline_2 <- 
+ggplot(SI_plot%>%filter(parameter %in% c("K", "Ca","SO4", "Na", "Cl", "Mg", "F")),
+       aes(x = Date, y = value, group = interaction(site_code, Year), color = site_code)) +
+  geom_line() +
+  geom_point()+
+  facet_grid(rows = vars(combined),cols = vars(Year), scales = "free", switch = "y") +
+  labs(x = "Date",
+       y = "") +
+  scale_color_manual(values = colorsBS_site_code)+
+  scale_x_datetime(
+    date_labels = "%b",  # e.g., May\n2021
+    date_breaks = "month"
+  ) +
+  labs(color = "Site")+
+  theme_bw() +
+  theme(strip.placement = "outside", 
+        legend.position = "bottom",
+        # make the x ticks at 45 degrees
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot_image(Si_timeline_2,"SI_timeline_2.png")
+
+```
+
+## SI Plot 2: Percent of reservoir samples eutrophic status
+
+In cold water lakes (our study sites), mesotrophic levels are defined as
+between 2.6 and 8 µg/L, and eutrophic levels are greater than 8 µg/L.
+Under 2.6 µg/L is considered Oligotrophic.
+
+```{r}
+
+chla_status_site_year <- tidy_chem%>%
+  filter(!is.na(ChlA))%>%
+  filter(site_code %in% primary_study_res)%>%
+  mutate(eu_status  = case_when(ChlA >= 2.6 &ChlA <= 8 ~ "Mesotrophic", 
+                                ChlA > 8 ~ "Eutrophic",
+                                ChlA < 2.6 ~ "Oligotrophic"))%>%
+  group_by(site_code, Year, eu_status, burn_group)%>%
+  summarise(eu_stats = n())%>%
+  ungroup()%>%
+  pivot_wider(names_from = eu_status, values_from = eu_stats)%>%
+  mutate_at(vars(-Year), ~replace(., is.na(.), 0))%>%
+  rowwise()%>%
+  mutate(total_samples = sum(c(Eutrophic, Mesotrophic, Oligotrophic)),
+    perc_eu = round((Eutrophic/total_samples)*100, digits= 1), 
+         perc_meso = round((Mesotrophic/total_samples)*100, digits= 1),
+         perc_meso_eu = round(((Eutrophic+Mesotrophic)/total_samples)*100, digits= 1), 
+        perc_oligo = round((Oligotrophic/total_samples) *100, digits= 1),
+    Year = as.character(Year))
+
+all_years <- chla_status_site_year%>%
+  group_by(burn_group)%>%
+  summarise(total_samples = sum(total_samples), 
+            perc_eu = sum(Eutrophic)/sum(total_samples)*100, 
+            perc_meso = sum(Mesotrophic)/sum(total_samples)*100, 
+            perc_meso_eu = sum(Eutrophic + Mesotrophic)/sum(total_samples)*100, 
+            perc_oligo = sum(Oligotrophic)/sum(total_samples)*100)
+
+long_chla_status <- chla_status_site_year%>%
+  select(site_code, Year, total_samples, perc_eu, perc_meso, perc_meso_eu, perc_oligo)%>%
+  pivot_longer(cols = c(perc_eu, perc_meso, perc_meso_eu, perc_oligo), names_to = "category", values_to = "value" )
+
+long_chla_status$site_code = factor(long_chla_status$site_code, levels = c("LNGR","JOER" , "CBRR", "PTRR", "BRNR" ))
+
+chla_status <- c(
+  perc_eu = "% eutrophic",
+  perc_meso = "% mesotrophic ",
+  perc_meso_eu = "% mesotrophic & eutrophic",
+  perc_oligo = "% oligotrophic"
+)
+
+#PLOT
+ long_chla_status%>%
+  filter(site_code %in% primary_study_res )%>%
+   filter(category != "perc_meso_eu")%>%
+  ggplot(aes(x = Year, y = value,group = site_code, color =  site_code))+
+  scale_color_manual(values = colorsBS_site_code)+
+ geom_line()+
+   geom_point()+
+  theme_bw(base_size = 15)+
+facet_wrap(~category, ncol = 1, labeller = labeller(category = chla_status))+
+  labs(
+    x = "Year",
+    y = "Percent of chlorophyll-*a* samples", 
+    color = "Reservoir")+
+  theme(axis.title.y = ggtext::element_markdown())
+
+```
+
+
+# Watershed Characteristics (Spatial)
+
+## Merging transbasin diversion watersheds
+
+```{r}
+
+grand_ditch <- st_read("data/raw/spatial/res_study/working_tb/grand_ditch.shp" )%>%
+  st_transform(4326)
+
+michigan_ditch <- st_read("data/raw/spatial/res_study/working_tb/michigan_ditch.shp" )%>%
+  st_transform(4326)
+
+LRT <- st_read("data/raw/spatial/res_study/working_tb/Laramie_River_Tunnel.shp" )%>%
+  st_transform(4326)
+
+
+mapview::mapview(grand_ditch)+
+  mapview::mapview(michigan_ditch)+
+  mapview::mapview(LRT)
+
+TB <- bind_rows(
+  grand_ditch,
+  michigan_ditch,
+  LRT
+)
+
+#mapview::mapview(TB, zcol = "site_name", burst = T)
+#st_write(TB, "data/raw/spatial/res_study/trans_basin_watersheds.shp")
+
+#Old code to merge stream stats generated watershed with relevant transbasin
+# 
+# polygon3 <- st_read("data/spatial/working/SLEP_ss/layers/globalwatershed.shp" )%>%
+#   st_transform(4326)%>%
+#   mutate(site_name = "site_streamstats")%>%
+#   select(site_name, geometry)
+# 
+# st_is_valid(polygon3)
+#polygon3 <- st_make_valid(polygon3)
+# 
+# mapview::mapview(polygon3)
+
+# Merge polygons
+# merged_geometry <- st_difference(polygon2$geometry, polygon1$geometry)
+# #merged_geometry <- st_union(polygon1$geometry, polygon2$geometry)
+# 
+# merged_polygon <- st_sf(
+#   site_name = "HORR",
+#   geometry = st_sfc(merged_geometry))%>%
+#   st_make_valid()
+# 
+# st_is_valid(merged_polygon)
+# 
+# mapview::mapview(merged_polygon)
+```
+
+
+## Landcover
 
 ```{r}
 
@@ -2156,10 +2039,10 @@ ws_all_lc <- map_df(years, compute_all_landcovers)%>%
   mutate(pp_change = value_2023 - value_2019)
 
 
-rm(nlcd_rasters, nlcd_tiffs, years)
+rm(years)
 ```
 
-## Getting DEM data
+## Slope, elevation and aspect
 
 ```{r}
 
@@ -2178,7 +2061,6 @@ ws_chars<- map_dfr(unique(watersheds$site_code), function(ws_code){
   
   elev <- get_elev_raster(ws, z = z_num, verbose = F)
 
-  
   ws_elev <- exactextractr::exact_extract(elev, ws,
                                          append_cols = "site_code",
                                          summarize_df = T,
@@ -2189,7 +2071,7 @@ ws_chars<- map_dfr(unique(watersheds$site_code), function(ws_code){
     select(site_code, mean_elev, max_elev, min_elev)
   
   
-  #get the slope
+  #calculate slope
   slope <- raster::terrain(elev, opt = "slope", unit = "degrees", verbose = F)
   ws_slope <- exactextractr::exact_extract(slope, ws,
                                          append_cols = "site_code",
@@ -2201,7 +2083,6 @@ ws_chars<- map_dfr(unique(watersheds$site_code), function(ws_code){
     select( mean_slope, max_slope)
   
   #calculate aspect
-  
   aspect <- raster::terrain(elev, opt = "aspect", unit = "degrees")
   ws_aspect <- exactextractr::exact_extract(aspect, ws,
                                          append_cols = "site_code",
@@ -2211,12 +2092,9 @@ ws_chars<- map_dfr(unique(watersheds$site_code), function(ws_code){
     select(mean_aspect)%>%
     round(2)
   # calculate watershed area
-  
- 
   ws_area <- st_area(ws)%>%
     #convert to km2
     units::set_units("km^2")
-  
   
   bind_cols(ws_elev, ws_slope, ws_aspect)%>%
     mutate(ws_area_km2 = ws_area)
@@ -2224,15 +2102,40 @@ ws_chars<- map_dfr(unique(watersheds$site_code), function(ws_code){
 })
 
 ```
+## Calculating snow persistance for watersheds
 
-### Get elevational gradient for CPF fire
+```{r}
+
+#get the snow persistence raster
+snow <- raster::raster(here(external_spatial, "snow_persistance/MOD10A2_SCI_2020.tif"))
+
+ws_snow <- map_dfr(unique(watersheds$site_code),  function(ws_code){
+  
+  ws <- watersheds %>%
+    filter(site_code == ws_code)
+  exactextractr::exact_extract(snow, ws,
+                                          append_cols = "site_code",
+                                          summarize_df = T,
+                                          fun=function(x) x %>%
+                                            summarise(mean_snow = mean(value, na.rm = T), 
+                                                      max_snow = max(value, na.rm = T), 
+                                                      min_snow = min(value, na.rm = T))) %>%
+    select(site_code, mean_snow, max_snow, min_snow)%>%
+    mutate(across(where(is.numeric), ~round(., 0)))%>%
+    mutate(days = 184 * (mean_snow/100), 
+           mean_snow_free_date= format(as.Date(days, origin = "2020-01-01"), "%m-%d"))%>%
+    select(site_code, mean_snow, mean_snow_free_date)
+})
+
+```
+
+## CPF Elevational Gradient
 
 ```{r}
 ws <-  terra::rast(here(spatial_dir, "cpf_sbs_BAER.tif"))
-#remove 1 values
+#remove 0 values
 #ws[ws == 1] <- NA
 ws[ws == 0] <- NA
-mapview::mapview(ws)
 
 #convert to shapefile
 # Convert raster to polygon (dissolve all cells into one)
@@ -2250,68 +2153,37 @@ elev <- get_elev_raster(outline, z = 9, verbose = F)
 
 
 
-  ws_elev <- exactextractr::exact_extract(elev, outline,
-                                         append_cols = "site_code",
-                                         summarize_df = T,
-                                         fun=function(x) x %>%
-                                           summarise(mean_elev = mean(value, na.rm = T), 
-                                                     max_elev = max(value, na.rm = T), 
-                                                     min_elev = min(value, na.rm = T)))%>%
-    select(site_code, mean_elev, max_elev, min_elev)
+ws_elev <- exactextractr::exact_extract(elev, outline,
+                                        append_cols = "site_code",
+                                        summarize_df = T,
+                                        fun=function(x) x %>%
+                                          summarise(mean_elev = mean(value, na.rm = T), 
+                                                    max_elev = max(value, na.rm = T), 
+                                                    min_elev = min(value, na.rm = T)))%>%
+  select(site_code, mean_elev, max_elev, min_elev)
 
-  
-  ws_area <- st_area(outline)%>%
-    #convert to km2
-    units::set_units("km^2")
-  
-  
-  cpf<- bind_cols(ws_elev)%>%
-    mutate(ws_area_km2 = ws_area)%>%
-    group_by(site_code)%>%
-    summarise(mean_elev = mean_elev,
-           max_elev = max(max_elev),
-           min_elev = min(min_elev),
-           ws_area_km2 = sum(ws_area_km2))%>%
-    slice(1)
-  
+
+ws_area <- st_area(outline)%>%
+  #convert to km2
+  units::set_units("km^2")
+
+
+cpf<- bind_cols(ws_elev)%>%
+  mutate(ws_area_km2 = ws_area)%>%
+  group_by(site_code)%>%
+  summarise(mean_elev = max(mean_elev),
+            max_elev = max(max_elev),
+            min_elev = min(min_elev),
+            ws_area_km2 = sum(ws_area_km2))
 ```
 
-## Calculating snow persistance for watersheds
+
+
+## Soil Burn Severity
+
+From Rhoades paper : "We partitioned the catchments into groups based on the proportional area burned at high + moderate severity (Extensive:>50%, High: 25–50%, Mid:<25%). Unburned catchments and those with <25% total burn extent, no high severity and little moderate severity (0–13%) were included in a No/Low class."
 
 ```{r}
-
-  #get the snow persistence raster
-  snow <- raster::raster(here(external_spatial, "snow_persistance/MOD10A2_SCI_2020.tif"))
-
-ws_snow <- map_dfr(unique(watersheds$site_code),  function(ws_code){
-  
-  ws <- watersheds %>%
-    filter(site_code == ws_code)
-  
-  ws_snow <- exactextractr::exact_extract(snow, ws,
-                                         append_cols = "site_code",
-                                         summarize_df = T,
-                                         fun=function(x) x %>%
-                                           summarise(mean_snow = mean(value, na.rm = T), 
-                                                     max_snow = max(value, na.rm = T), 
-                                                     min_snow = min(value, na.rm = T))) %>%
-    select(site_code, mean_snow, max_snow, min_snow)%>%
-    mutate(across(where(is.numeric), ~round(., 0)))%>%
-    mutate(days = 184 * (mean_snow/100), 
-           mean_snow_free_date= format(as.Date(days, origin = "2020-01-01"), "%m-%d"))%>%
-    select(site_code, mean_snow, mean_snow_free_date)
-  
-  ws_snow
-  
-})
-
-rm(snow)
-```
-
-## Calculate watershed soil burn severity
-
-```{r}
-
 
 sbs <- terra::rast(here(spatial_dir, "cpf_sbs_BAER.tif"))
 
@@ -2328,7 +2200,7 @@ sbs[is.na(sbs) | is.null(sbs) | sbs == 0] <- 5
 # Get the extent of the ws vector
 ws_extent <- terra::ext(ws_raster)
 
-# Extend the raster to match the ws extent, assigning new areas the value of 5
+# Extend the raster to match the ws extent, assigning new areas the value of 5 (Unburned)
 sbs_extended <- terra::extend(sbs, ws_extent, fill = 5)
 
 # Get the cell size in map units (meters)
@@ -2336,9 +2208,114 @@ cell_size <- terra::res(sbs_extended)
 
 cnv_to_km2 <- (cell_size[1] * cell_size[2]) / 1e6
 
-  # using the exactextractr package, get what is essentially a "zonal histogram" in
-  # ArcGIS speak
-  extracted_sbs <- exactextractr::exact_extract(sbs_extended %>% raster::raster(), ws,
+# using the exactextractr package, get what is essentially a "zonal histogram" in
+# ArcGIS speak
+ws_extracted_sbs <- exactextractr::exact_extract(sbs_extended %>% raster::raster(), ws,
+                                              append_cols = "site_code",
+                                              summarize_df = T,
+                                              fun=function(x) x %>%
+                                                group_by(sbs_code = as.character(value)) %>%
+                                                summarise(count = sum(coverage_fraction))) %>%
+  group_by(site_code)%>%
+  mutate(total = sum(count)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = 'sbs_code', values_from = 'count',
+              names_glue = "sbs{sbs_code}" ) %>%
+  inner_join(ws, .) -> ws_sbs
+
+ws_sbs_full <- ws_extracted_sbs %>% 
+  ungroup()%>%
+  st_drop_geometry()%>%
+  #if a column is NA change it to 0
+  mutate(across(starts_with("sbs"), ~replace_na(., 0))) %>%
+  mutate(
+    # 1. Define raw pixel counts for burn classes
+    Unburned = sbs5 + sbs6,
+    `Very Low` = sbs1,
+    Low = sbs2,
+    Moderate = sbs3,
+    High = sbs4,
+    
+    # 2. Convert to Square Kilometers (km2)
+    Unburned_km2 = Unburned * cnv_to_km2,
+    VeryLow_km2 = `Very Low` * cnv_to_km2,
+    Low_km2 = Low * cnv_to_km2,
+    Moderate_km2 = Moderate * cnv_to_km2,
+    High_km2 = High * cnv_to_km2,
+    total_km2 = total * cnv_to_km2,
+    
+    # 3. Calculate Percentages (Assumes 'total' column exists in raw pixels)
+    Unburned_pct = (Unburned / total) * 100,
+    VeryLow_pct = (`Very Low` / total) * 100,
+    Low_pct = (Low / total) * 100,
+    Moderate_pct = (Moderate / total) * 100,
+    High_pct = (High / total) * 100
+  )%>%
+  mutate(across(Unburned:High_pct, ~round(., 1)))%>%
+  mutate(extent_burned = ((`Very Low` + Low + Moderate + High)),
+         extent_burned_km2 = extent_burned * cnv_to_km2,
+         extent_burned_pct = (extent_burned / total) * 100,
+         high_burn = (Moderate + High)/total*100,
+         burn_class = case_when(high_burn > 50 ~ "Extensive", 
+                                high_burn > 25 & high_burn <= 50 ~ "High", 
+                                high_burn < 25 & Moderate_pct <= 13 & high_burn <= 5 ~ "No/Low",
+                                TRUE ~ "Mid"))
+
+ws_sbs_concise <- ws_sbs_full%>%
+  #filter(site_code %in% c("CBRR", "BRNR", "PTRR","COMR", "HORR", "JOER", "LNGR"))%>%
+  select(site_code, 
+         `Total Area (km2)` = total_km2,
+         `Extent Burned (km2)` = extent_burned_km2,
+         `Extent Burned (%)` = extent_burned_pct,
+         `High Burn (%)` = high_burn, 
+         `Watershed Burn Class` = burn_class)
+  
+
+
+```
+
+### Buffer SBS
+
+```{r}
+waterbody <- st_read("data/raw/spatial/res_study/study_waterbodies.shp")%>%
+  st_transform(sf::st_crs(sbs)) #transform to coordinates in sbs
+
+waterbody_buffer <- waterbody%>%
+  #add a buffer of 200 meters to the waterbodies
+  st_buffer(200) 
+
+# pick out watersheds of reservoirs
+res_ws <- ws%>%
+  filter(site_code %in% c("JOER","LNGR","COMR","HORR","CBRR","PTRR", "BRNR"))%>%
+  st_transform(sf::st_crs(sbs))
+
+#clip buffer to it's watershed
+waterbody_buffer <- st_intersection(waterbody_buffer,res_ws )%>%
+  #only keep the waterbodies that are in the same watershed as the reservoir
+  filter(site_code == site_code.1)
+
+#remove water body from buffer
+final_buffer <- st_difference(waterbody_buffer, waterbody)%>%
+  filter(site_code == site_code.1 & site_code.1 == site_code.2)
+
+#map to view
+# tm_basemap("OpenStreetMap") +
+# tm_shape(final_buffer) +
+#   tm_polygons(col = "site_code", palette = "Set2", alpha = 0.5, border.col = "black", border.lwd = 1, title = "Buffered Waterbodies")+
+#   #put the legend inside the plot
+#   tm_layout(legend.position = c("right", "bottom"), title = "Buffered Waterbodies within Watersheds", title.position = c("right", "top"))
+
+
+# Get the extent of the ws vector
+waterbody_buffer_extent <- terra::ext(final_buffer)
+
+# Extend the raster to match the ws extent, assigning new areas the value of 5
+sbs_extended <- terra::extend(sbs, waterbody_buffer_extent, fill = 5)
+
+# Get the cell size in map units (meters)
+cell_size <- terra::res(sbs_extended)
+
+  extracted_sbs <- exactextractr::exact_extract(sbs_extended %>% raster::raster(), final_buffer,
                                          append_cols = "site_code",
                                          summarize_df = T,
                                          fun=function(x) x %>%
@@ -2352,123 +2329,110 @@ cnv_to_km2 <- (cell_size[1] * cell_size[2]) / 1e6
     inner_join(ws, .) -> ws_sbs
   
   
-#   library(tmap)
-# 
-# # Switch to interactive mode
-# tmap_mode("view")
-# 
-# # Create the map
-# tm_shape(sbs_extended) + 
-#   tm_raster(palette = "YlOrRd", opacity = 0.7, title = "Burn Severity") +
-# tm_shape(ws) + 
-#   tm_borders(col = "black", lwd = 2) + 
-#   tm_layout(title = "Watershed vs. SBS Overlap")
+
   
-  
-  ws_percents <- extracted_sbs %>% 
-    #if a column is NA change it to 0
-    mutate(across(starts_with("sbs"), ~replace_na(., 0))) %>%
-    mutate(Unburned=100*((sbs5 + sbs6) /total),
-           `Very Low` =100*(sbs1/total),
-           Low=100*(sbs2/total),
-           Moderate=100*(sbs3/total),
-           High=100*(sbs4/total), 
-           #total_check = rowSums(across(c(Unburned:High))), 
-           Unburned_km2= (sbs5 + sbs6)*cnv_to_km2,
-           `Very Low_km2` = sbs1*cnv_to_km2,
-           Low_km2= sbs2*cnv_to_km2,
-           Moderate_km2= sbs3*cnv_to_km2,
-           High_km2=sbs4*cnv_to_km2 , 
-           total_burn_km2 = rowSums(across(c(`Very Low_km2`:High_km2))))%>%
-    select(site_code,total, Unburned:total_burn_km2)%>%
+  waterbody_buffer_percents <- extracted_sbs %>% 
     ungroup()%>%
     st_drop_geometry()%>%
-    mutate(across(Unburned:total_burn_km2, ~round(., 1)))%>%
-    mutate(lows = `Very Low`+Low, 
-           lows_km2 = `Very Low_km2`+Low_km2) %>% 
-    mutate(watershed_level=((Unburned*0)+(`Very Low`*0.1)+(Low*0.4)+(Moderate*0.7)+(High*1))/(Unburned+`Very Low`+Low+Moderate+High))
-
-
-
-ws_sbs <- ws_percents
-
-#just burned study reservoirs (excl LNGR, JOER)
-ws_sbs_res <- ws_sbs%>%filter(site_code %in% c("CBRR", "BRNR", "PTRR","COMR", "HORR", "JOER", "LNGR"))%>%
-  group_by(site_code)%>%
-  summarize(total_area = sum(total*cnv_to_km2), 
-            total_burn_km2 = sum(total_burn_km2), 
-            lows_km2 = sum(lows_km2), 
-            Moderate_km2 = sum(Moderate_km2),
-            High_km2 = sum(High_km2))%>%
-  mutate(perc_burn = (total_burn_km2/total_area)*100, 
-         perc_low = (lows_km2/total_area)*100, 
-         perc_mod = (Moderate_km2/total_area)*100, 
-         perc_high = (High_km2/total_area)*100)
-
-
-rm(sbs, sbs_extended, ws_raster, ws_extent)
-
+    #if a column is NA change it to 0
+    mutate(across(starts_with("sbs"), ~replace_na(., 0))) %>%
+    mutate(
+      # 1. Define raw pixel counts for burn classes
+      Unburned = sbs5 + sbs6,
+      `Very Low` = sbs1,
+      Low = sbs2,
+      Moderate = sbs3,
+      High = sbs4,
+      
+      # 2. Convert to Square Kilometers (km2)
+      Unburned_km2 = Unburned * cnv_to_km2,
+      VeryLow_km2 = `Very Low` * cnv_to_km2,
+      Low_km2 = Low * cnv_to_km2,
+      Moderate_km2 = Moderate * cnv_to_km2,
+      High_km2 = High * cnv_to_km2,
+      total_km2 = total * cnv_to_km2,
+      
+      # 3. Calculate Percentages (Assumes 'total' column exists in raw pixels)
+      Unburned_pct = (Unburned / total) * 100,
+      VeryLow_pct = (`Very Low` / total) * 100,
+      Low_pct = (Low / total) * 100,
+      Moderate_pct = (Moderate / total) * 100,
+      High_pct = (High / total) * 100
+    )%>%
+    mutate(across(Unburned:High_pct, ~round(., 1)))%>%
+    mutate(extent_burned = ((`Very Low` + Low + Moderate + High)),
+           extent_burned_km2 = extent_burned * cnv_to_km2,
+           extent_burned_pct = (extent_burned / total) * 100,
+           high_burn = (Moderate + High)/total*100,
+           burn_class = case_when(high_burn > 50 ~ "Extensive", 
+                                  high_burn > 25 & high_burn <= 50 ~ "High", 
+                                  high_burn < 25 & Moderate_pct <= 13 & high_burn <= 5 ~ "No/Low",
+                                  TRUE ~ "Mid"))
+  
+  ws_burn_info <- ws_sbs_concise %>%
+    left_join(waterbody_buffer_percents %>% 
+                select(site_code,
+                       `200m Buffer Total Area (km2)` = total_km2,
+                       `200m Buffer Burn (km2)` = extent_burned_km2,
+                       `200m Buffer Burn (%)` = extent_burned_pct,
+                       `200m Buffer High Burn (%)` = high_burn,
+                       `200m Buffer Burn Class` = burn_class), by = "site_code")
+  
 ```
-
 
 ## Get data together for Reservoir characteristics table
 
 ```{r}
-res_meta <- read_csv(here(spatial_dir, "reservoir_metadata.csv"))
+# Reservoir area, normal storage capacity and reservoir depth from NID database
+res_meta <- read_csv(here(spatial_dir, "reservoir_metadata.csv"))%>% rename(`Reservoir Operator` = Manager)
 
 all_ws_data <- most_recent_meta %>%
                     select(site_code, Site_Name)%>%
   left_join(ws_chars, by = c("site_code"))%>%
-  left_join(ws_sbs%>% select(-total), by = c("site_code"))%>%
-  left_join(ws_all_lc, by = c("site_code"))%>%
+  left_join(ws_burn_info, by = c("site_code"))%>%
+  #left_join(ws_all_lc, by = c("site_code"))%>%
   left_join(ws_lc, by = c("site_code"))%>%
+  left_join(res_meta, by = c("site_code"))%>%
   #mutate all numeric columns to round to 2 decimal places
   mutate(across(where(is.numeric), ~round(., 2))) %>%
-   mutate(Site = paste0(Site_Name, " (", site_code, ")"),
-         total_burn_perc = round(lows+Moderate+High, 1),
-         total_burn_sum = paste0(total_burn_km2, " (",total_burn_perc, ") " ))%>%
-  na.omit()
-
-concise_ws_data <- all_ws_data %>%
-  select(site_code, total_burn_perc, mean_elev, max_elev, min_elev, ws_area_km2)%>%
-  st_drop_geometry()%>%
-  distinct()
-
-write_csv(concise_ws_data, here(spatial_dir,"concise_ws_chars.csv"))
+   mutate(Site = paste0(Site_Name, " (", site_code, ")"))%>%
+  filter(!is.na(min_elev))%>%
+  #cleaning up the names
+  select( `Site (site code)` = Site,
+          site_code, 
+          `Watershed Area (km^2)` = ws_area_km2,
+          `Reservoir Elevation (m)` = min_elev,
+          `Max Watershed Elevation (m)` = max_elev,
+          `Mean Watershed Elevation (m)` = mean_elev, 
+          `Normal Storage Capacity (acre ft)`, 
+          `Reservoir Depth (m)`, 
+          `Reservoir Operator`,
+          `Extent Burned (km2)`,
+          `Extent Burned (%)`,
+          `High Burn (%)`,
+          `Watershed Burn Class`,
+          `200m Buffer Total Area (km2)` ,
+          #`200m Buffer Burn (km2)`,
+          `200m Buffer Burn (%)`,
+          #`200m Buffer High Burn (%)`,
+          `200m Buffer Burn Class`,
+          `Mean Slope (degrees)` = mean_slope,
+          `2019 Top 2 Land Covers` = lc_top2_2019,
+          `2023 Top 2 Land Covers` = lc_top2_2023)
 
 res_ws_data <- all_ws_data%>%
-    left_join(res_meta, by = c("site_code"))%>%
-  #cleaning up the names
-  mutate(Site = paste0(Site_Name, " (", site_code, ")"),
-         total_burn_perc = round(lows+Moderate+High, 1),
-         total_burn_sum = paste0(total_burn_km2, " (",total_burn_perc, ") " ))%>%
-  select( site_code, Site,
-         `Watershed Area (km^2)` = ws_area_km2, 
-          `Reservoir Elevation (m)` = min_elev,
-         `Max Watershed Elevation (m)` = max_elev,
-         `Mean Watershed Elevation (m)` = mean_elev, 
-         `Normal Storage Capacity (acre ft)`, 
-          `Reservoir Depth (m)`, 
-         `Reservoir Operator` = Manager,
-         `Total Burn Area (km^2, % watershed)` = total_burn_sum,
-         `Burn Index (0-1)` = watershed_level, 
-         `Percent High Severity` = High,
-         `Percent Moderate Severity` = Moderate,
-         `Percent Very Low & Low Severity` = lows,
-         `Percent Unburned` = Unburned,
-         `Mean Slope (degrees)` = mean_slope,
-         `2019 Top 2 Land Covers` = lc_top2_2019,
-         `2023 Top 2 Land Covers` = lc_top2_2023)%>%
-  arrange((`Burn Index (0-1)`))%>%
-  distinct()%>%
-  filter(site_code %in% c("CBRR", "BRNR", "PTRR","COMR", "HORR", "JOER", "LNGR"))
+    filter(site_code %in% c("CBRR", "BRNR", "PTRR","COMR", "HORR", "JOER", "LNGR"))%>%
+  select(-site_code)
 
 write_csv(res_ws_data, here(spatial_dir, "reservoir_characteristics.csv"))
+write_csv(ws_all_lc, here(spatial_dir, "watershed_characteristics.csv"))
 ```
 
 ## Make a table with the land cover and watershed characteristics
 
 ```{r}
+res_ws_data <- read_csv(here(spatial_dir, "reservoir_characteristics.csv"))
+watershed_characteristics <- read_csv(here(spatial_dir, "watershed_characteristics.csv"))
 
 t_res_ws_data<- res_ws_data%>%
   t()%>%
@@ -2481,7 +2445,7 @@ t_res_ws_data<- res_ws_data%>%
 
 #create standard border color and width
 std_border <- fp_border_default(width = 1, color = "black")
-  
+
 ft <- flextable(t_res_ws_data)%>%
   separate_header() %>%
   align(align = "center", part = "all")%>%
@@ -2490,7 +2454,7 @@ ft <- flextable(t_res_ws_data)%>%
   border_remove()%>%
   border_outer(part="all", border = std_border )%>%
   border_inner_h(border = std_border, part="all")%>%
-   border_inner_v(border = std_border, part="all")%>%
+  border_inner_v(border = std_border, part="all")%>%
   autofit()%>%
   fontsize( size = 6, part = "body")%>%
   fontsize(size = 6, part = "header") %>% # Smaller font size for the header
@@ -2505,15 +2469,16 @@ sect_properties <- prop_section(
   page_margins = page_mar()
 )
 # 
- #ft
+#ft
 # 
 # # Save the table to a Word document
 #save_as_docx(ft, path = "data/figs_output/res_ws_data_table.docx", pr_section = sect_properties)
 ```
 
-## Maps
 
-## Pull in watersheds and sampling points and join them include metadata
+# Maps
+
+### Read in shapefiles for watersheds, sampling locs and waterbodies
 
 ```{r}
 
@@ -2536,41 +2501,23 @@ sampling_points_study_res <- sampling_points%>%
     watershed == "Peterson Reservoir" ~ "PTRR"))%>%
   select(site_code, Site_Name, watershed, ws_site_code)
     
-st_write(sampling_points_study_res, "data/spatial/maps_data/sampling_points.shp")
+#st_write(sampling_points_study_res, "data/raw/spatial/sampling_points.shp")
 
-#pull in watersheds
-watersheds <- st_read(dsn = "data/spatial/cpf_watersheds/cpf_watersheds.shp")%>%
-  left_join(most_recent_meta, by = c("site_code"))
 
-watersheds_study_res <- watersheds%>%
-  filter(site_code %in% c("JOER", "CBRR", "BRNR", "LNGR", "PTRR","COMR", "HORR"))%>%
-  select(site_code, Site_Name, watershed)
-
-st_write(watersheds_study_res, "data/spatial/maps_data/watersheds.shp")
-
-```
-
-## Pull in waterbodies
-
-```{r}
-
-study_waterbodies <- st_read("data/spatial/study_water_bodies/study_water_bodies.shp")%>%
+study_waterbodies <- st_read("data/raw/spatial/res_study/study_waterbodies.shp")%>%
   st_transform(4326)%>%
-  left_join(most_recent_meta, by = c("site_code"))%>%
   select(site_code, Site_Name, watershed)
 
-st_write(study_waterbodies, "data/spatial/maps_data/study_waterbodies.shp")
 
-#mapview::mapview(study_waterbodies)
 
 ```
 
-## Pull in SBS tiff
+### Reservoirs with SBS
 
 ```{r}
 
 # Load the raster
-sbs <- raster::raster("data/spatial/BAER_sbs_raster/cpf_sbs_BAER.tif")
+sbs <- raster::raster("data/raw/spatial/res_study/cpf_sbs_BAER.tif")
 #project into 4326
 sbs <- projectRaster(sbs, crs = 4326)
 
@@ -2579,285 +2526,56 @@ sbs[sbs == 6] <- NA
 sbs[sbs == 0] <- NA
 # Define burn severity colors and labels
 
-legend <- tibble(
-  value = c(1, 2, 3, 4, 5),
-  legend = c("Very Low/Unburned", 
-             "Low", 
-             "Moderate", 
-             "High",
-             "Unburned"),
-        colors = c("blue", "green2", "yellow", "red", "green4"))
+#clip sbs_extended to watershed extent
+ws_extent <- ws%>%filter(site_code %in% c("JOER","COMR","HORR","CBRR","PTRR", "BRNR"))%>%
+  st_transform(sf::st_crs(sbs_extended))%>%
+  st_bbox() %>%
+  #add a buffer of 1000 meters to the extent
+  st_as_sfc() %>%
+  st_buffer(1000)
 
-# Map the values to colors
-burn_colors <- legend$colors
-names(burn_colors) <- legend$value
-
-# Create an interactive map
-mapview::mapview(sbs,
-        col.regions = burn_colors,
-        legend = TRUE,
-        na.color = "transparent")
-
-mapview::mapview(sbs)+
-  mapview::mapview(watersheds%>%filter(site_code == "PBD"))
- 
-
-
-```
-
-## Make a simple map of reservoir points, watersheds over the SBS
-
-```{r}
-mapview::mapview(sbs, col.regions = burn_colors, legend = TRUE, na.color = "transparent")+
-  mapview::mapview(study_waterbodies)+
-  mapview::mapview(watersheds_study_res)+
-mapview::mapview(sampling_points_study_res)
-  
-
-mapview::mapview(sbs, col.regions = burn_colors, legend = TRUE, na.color = "transparent") +
-  
-  mapview::mapview(watersheds_study_res, zcol = "site_code" , color = colorsBS_site_code_alpha, col.regions = colorsBS_site_code_alpha,
-                   alpha.regions = 0.1,   burst = T, lwd = 2)+  
-  #mapview::mapview(sampling_points_study_res, zcol = "watershed_site_code" , col.regions = colorsBS_site_code_alpha, burst = T)+
-  mapview::mapview(study_waterbodies ,col.regions = "blue2", burst = T)
-
-  
-```
-
-## attempt at ggplot map
-
-```{r}
-
-library(ggplot2)
-library(sf)
-library(raster)
-library(tidyverse)
-library(ggspatial)
-library(ggmap)
-library(basemaps)
-
-ext <- draw_ext()
-
-
-ext_final <- st_transform(sbs,crs = st_crs(3857))
-# set defaults for the basemap
-set_defaults(map_service = "esri", map_type = "natgeo_world_map")
-
-# load and return basemap map as class of choice, e.g. as image using magick:
-basemap_magick(ext)
-
-
-
-# Convert the raster (sbs) to a data frame for ggplot
-sbs_df <- as.data.frame(raster::rasterToPoints(sbs), stringsAsFactors = FALSE)
-colnames(sbs_df) <- c("x", "y", "value")
-
-# Define the ggplot
-ggplot() + 
-  basemap_gglayer(ext_final)+
-  
-  # Add the watersheds layer
-  geom_sf(data = watersheds_study_res, aes(color = site_code), fill = NA, linewidth = 1.5) +
-  scale_color_manual(
-    values = colorsBS_site_code_alpha,
-    name = "Watersheds"
-  ) +
-  
-  # Add the waterbodies layer
-  geom_sf(data = study_waterbodies, color = "blue2", fill = "blue2", alpha = 0.3) +
-  
-  # Remove axis titles and text
-  theme_minimal() +
-  theme(
-    axis.title = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank()
-  ) +
-  
-  # Add a legend title and adjust its position
-  guides(
-    fill = guide_legend(title = "Soil Burn Severity"),
-    color = guide_legend(title = "Watersheds")
-  )
-```
-
-# Merging watersheds
-
-```{r}
-library(sf)
-library(mapview)
-
-
-
-grand_ditch <- st_read("data/spatial/working/final_watersheds/grand_ditch.shp" )%>%
-  st_transform(4326)%>%
-  #mutate(site_name = "Michigan Ditch")%>%
-  select(site_name, geometry)
-
-michigan_ditch <- st_read("data/spatial/working/final_watersheds/michigan_ditch.shp" )%>%
-  st_transform(4326)%>%
-  #mutate(site_name = "Michigan Ditch")%>%
-  select(site_name, geometry)
-
-LRT <- st_read("data/spatial/working/final_watersheds/LRT_TB_final.shp" )%>%
-  st_transform(4326)%>%
-  mutate(site_name = "Laramie River Tunnel")%>%
-  select(site_name, geometry)
-
-st_write(LRT, "data/spatial/working/final_watersheds/Laramie_River_Tunnel_final.shp")
-
-
-mapview::mapview(grand_ditch)+
-  mapview::mapview(michigan_ditch)+
-  mapview::mapview(LRT)
-
-TB <- bind_rows(
-  grand_ditch,
-  michigan_ditch,
-  LRT
+sbs_clip <- terra::crop(sbs_extended, ws_extent)
+#   library(tmap)
+# 
+# # Switch to interactive mode
+tmap_mode(mode = "plot")
+severity_cols <- c(
+  "#31A354", # 1: Very Low (Pale Yellow)
+  "#FFFFB2", # 2: Low (Yellow-Orange)
+  "#FD8D3C", # 3: Moderate (Orange)
+  "#E31A1C", # 4: High (Red)
+  "#31A354", # 5: Unburned (Green)
+  "steelblue"  # 6: Water (Blue)
 )
-
-mapview::mapview(TB, zcol = "site_name", burst = T)
-st_write(TB, "data/spatial/working/final_watersheds/trans_basin_ws.shp")
-
-# Merge polygons
-
-#st_write(grand_corrected, "data/spatial/working/final_watersheds/grand_ditch.shp")
-
-
-#st_write(michigan_final, "data/spatial/working/final_watersheds/michigan_ditch.shp")
-
-
-# 
-# polygon3 <- st_read("data/spatial/working/SLEP_ss/layers/globalwatershed.shp" )%>%
-#   st_transform(4326)%>%
-#   mutate(site_name = "SLEP_ss")%>%
-#   select(site_name, geometry)
-# 
-# st_is_valid(polygon3)
-#polygon3 <- st_make_valid(polygon3)
-# 
-# mapview::mapview(polygon3)
-
-# Merge polygons
-merged_geometry <- st_difference(polygon2$geometry, polygon1$geometry)
-#merged_geometry <- st_union(polygon1$geometry, polygon2$geometry)
-
-merged_polygon <- st_sf(
-  site_name = "HORR",
-  geometry = st_sfc(merged_geometry))%>%
-  st_make_valid()
-
-st_is_valid(merged_polygon)
-
-mapview::mapview(merged_polygon)
-# 
-# merged_geometry2 <- st_union(merged_polygon$geometry, polygon3$geometry)
-# 
-# 
-# merged_polygon2 <- st_sf(
-#   site_name = "SLEP",
-#   geometry = st_sfc(merged_geometry2))%>%
-#   st_make_valid()
-# 
-# st_is_valid(merged_polygon2)
-# 
-# mapview::mapview(merged_polygon2)
-
-
-# Visualize with different colors
-mapview::mapview(merged_polygon, zcol = "site_name", col.regions = "blue")+
-  #mapview::mapview(merged_polygon2, zcol = "site_name", col.regions = "green")+
-  mapview::mapview(polygon1, zcol = "site_name", col.regions = "cyan")+
-  mapview::mapview(polygon2, zcol = "site_name", col.regions = "red")
-  #mapview::mapview(polygon3, zcol = "site_name", col.regions = "yellow")
   
-
-# save the merged polygon in the spatial/working/final_ws folder
-st_write(merged_polygon, "data/spatial/working/final_watersheds/HORR_final.shp")
-
-st_read("data/spatial/working/final_watersheds/HORR_final.shp" )%>%
-  st_is_valid()
-
-
+# Create the map
+tm_shape(sbs_clip) +
+tm_raster(
+  palette = severity_cols,
+  breaks = c(0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5),
+  labels = c("Very Low", "Low", "Moderate", "High", "Unburned", "Water"),
+  opacity = 0.7,
+  title = "Burn Severity"
+) +
+  tm_shape(ws%>%filter(site_code %in% c("JOER","LNGR","COMR","HORR","CBRR","PTRR", "BRNR"))) +
+  tm_polygons(
+    col = "site_code", 
+    palette = "Set2",       # Qualitative palette for distinct site colors
+    title = "Monitoring Site",
+    alpha = 0.6             # Adds slight transparency to see terrain underneath
+  ) +
+  tm_borders(col = "black", lwd = 2) +
+  tm_shape(study_waterbodies)+
+  tm_polygons(col = "blue", alpha = 0.5, border.col = "black", border.lwd = 1, title = "Waterbodies") 
+  tm_layout(title = "Watershed vs. SBS Overlap")
 ```
-
-Stream Stats sites
-
-```{r}
-
-polygon <- st_read("data/spatial/working/HORR_tweaked/HORR_tweaked.shp" )%>%
-  st_transform(4326)
-
-polygon <- polygon[1,]%>%
-  mutate(site_name = "HORO")%>%
-  select(site_name, geometry)
-
-st_is_valid(polygon)
-mapview::mapview(polygon)
-
-st_write(polygon, "data/spatial/working/final_watersheds/HORO_final.shp")
-
-```
-
-# Read in all files
-
-```{r}
-
-meta <- read.csv("data/ross_clp_chem/data/metadata/location_metadata.csv")%>%
-  mutate(point_lat_long = paste0(Lat, " , ", Long), 
-         site_desc = Site_Name)%>%
-  select(-Lat, -Long, -burn_status, -Site_Name)
-
-# loop over the final_watersheds folder to read in all the files
-files <- list.files("data/spatial/working/final_watersheds", pattern = ".shp", full.names = T)
-
-# read in all the files
-final_watersheds <- map(files, st_read)%>%
-  bind_rows()
-
-ws_detailed <- final_watersheds%>%
-  mutate(tb_ws = case_when(
-    site_name %in% c("Grand Ditch", "Michigan Ditch", "Laramie River Tunnel") ~ T,
-    TRUE ~ FALSE), 
-    # South Fk sites include no TB, PTRR is all native flow, BRNR is all native flow
-  incl_tb = case_when(
-    site_name %in% c("HORR", "HORO", "HORI", "COMI", "COMO", "COMR", "LBEA", "PENN","SFM",
-                     "PTRO", "PTRR", "BRNR", "BMD" ) ~ F,
-    TRUE ~ T))
-
-%>%
-  left_join(meta, by = c("site_name" = "site_code"))
-
-st_write(ws_detailed, "data/spatial/cpf_watersheds_final/cpf_watersheds_final.shp")
-
-
-
-mapview::mapview(ws_detailed %>% filter(location_type == "Reservoir"), zcol = "site_name", burst = T)
-#+
- # mapview::mapview(ws_detailed %>% filter(trans_basin), zcol = "site_name", col.regions = "red")
-
-```
-
-## Test
-
-```{r}
-# Read in the final watersheds
-
-check <- st_read(dsn =  "data/spatial/cpf_watersheds_final/all_watersheds_w_meta.shp")
-
-mapview::mapview(check %>% filter(location_type == "Reservoir"), zcol = "site_name", burst = T)
-
-```
-
 
 # Flow data
 
 ```{r}
-library(cdssr)
- # pull dwr claftcco data from 1881-2021
-q_data <- cdssr::get_sw_ts(abbrev = "CLAFTCCO", timescale = "day", start_date = "1980-10-01", end_date = "2020-09-30")
-  
+
+# pull dwr claftcco data from 1980-2021
+q_data <- get_sw_ts(abbrev = "CLAFTCCO", timescale = "day", start_date = "1980-10-01", end_date = "2020-09-30")
   
 q_data_clean <- q_data%>%
   mutate(q_cfs = value, 
@@ -2882,24 +2600,4 @@ q_annual <- q_data_clean%>%
 
 mean(q_annual$t_flow_acft)
 
-#make a histogram of peak date
-q_annual%>%
-  ggplot(aes(x = month))+
-  geom_histogram(binwidth = 1)+
-  theme_bw(base_size = 15)+
-  labs(title = "Peak Flow Date Distribution", x = "Day of Year", y = "Count")
-
-
-
-check <- q_data_clean%>%
-  mutate(y_day = yday(Date), 
-         waterYear = as.character(waterYear))
-
-ggplot(check, aes(y_day, q_cfs, color = waterYear))+
-  geom_line()+
-  theme_bw(base_size = 15)+
-  labs(title = "Flow Data for 1999", x = "Date", y = "Flow (cfs)")+
-  gghighlight(waterYear %in% c("2019", "2012", "2000", "1990") , use_direct_label = TRUE)
-
-  
 ```
